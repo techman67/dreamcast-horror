@@ -36,3 +36,24 @@ Unity/**/.vs/
 # =========================
 .DS_Store
 Thumbs.db
+
+# =========================
+# Temporary / one-off files
+# =========================
+*.bak
+*.bak2
+*.bak3
+*.bak4
+*.bak5
+*.bak6
+*.bak7
+*.bak8
+*.bak9
+*.bak9b
+*.bak10
+Fix-*.ps1
+deepseek_powershell_*.ps1
+
+# MSVC linker artifacts (not needed by Unity)
+*.lib
+*.exp
