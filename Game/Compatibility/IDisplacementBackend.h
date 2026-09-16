@@ -1,14 +1,18 @@
-﻿#pragma once
+#pragma once
 #include "AuthoredBindings.h"
 #include "Types.h"
 
-// Result of resolving a desired kinematic displacement against the world.
+// Result of resolving a desired kinematic displacement.
 //
-// resolvedDelta : the displacement the backend actually allowed.
-// blocked       : true if the requested displacement could not be fully
-//                 satisfied. This is a partial-resolution signal, NOT a
-//                 "movement failed" signal. Game logic must apply
-//                 resolvedDelta even when blocked == true.
+// resolvedDelta:
+//     The movement the backend actually allowed.
+//
+// blocked:
+//     True when the complete requested movement could not be satisfied.
+//
+// IMPORTANT:
+// blocked does NOT mean "don't move".
+// Game logic must always apply resolvedDelta.
 struct DisplacementResult {
     Vec3 resolvedDelta;
     bool blocked = false;
@@ -18,10 +22,6 @@ class IDisplacementBackend {
 public:
     virtual ~IDisplacementBackend() = default;
 
-    // Resolve a desired displacement for a specific authored actor.
-    //
-    // The backend must never mutate Game state; it only reports what
-    // displacement it is willing to allow.
     virtual DisplacementResult resolveMove(
         const ActorRef& actor,
         const Vec3& position,

@@ -1,0 +1,244 @@
+using System.Runtime.InteropServices;
+using UnityEngine;
+
+// Always-on visualization of the C++ collision setup.
+//
+// Add this component to any GameObject in the scene.
+// It draws every CppCollision in the scene (not just the
+// selected one) plus the live C++ player position.
+//
+// Toggle with the "Enabled" checkbox, or from code via
+// CollisionDebug.Enabled = false;
+[ExecuteAlways]
+public sealed class CollisionDebug : MonoBehaviour
+{
+    public static bool Enabled = true;
+
+    [Header("Colors")]
+
+    public Color boxColor =
+        new Color(0.25f, 0.95f, 0.25f, 1.0f);
+
+    public Color sphereColor =
+        new Color(0.95f, 0.95f, 0.25f, 1.0f);
+
+    public Color capsuleColor =
+        new Color(0.95f, 0.45f, 0.95f, 1.0f);
+
+    public Color playerCircleColor =
+        new Color(1.00f, 0.35f, 0.35f, 1.0f);
+
+    [Header("Player radius (must match native)")]
+
+    public float playerCollisionRadius =
+        0.35f;
+
+    [Header("Also show fill, not just wireframe")]
+
+    public bool drawFilled =
+        true;
+
+    [DllImport(
+        "dreamcast_horror",
+        CallingConvention =
+            CallingConvention.Cdecl)]
+    private static extern float
+        unity_game_get_player_x();
+
+    [DllImport(
+        "dreamcast_horror",
+        CallingConvention =
+            CallingConvention.Cdecl)]
+    private static extern float
+        unity_game_get_player_y();
+
+    [DllImport(
+        "dreamcast_horror",
+        CallingConvention =
+            CallingConvention.Cdecl)]
+    private static extern float
+        unity_game_get_player_z();
+
+    private void OnDrawGizmos()
+    {
+        if (!Enabled)
+            return;
+
+        CppCollision[] shapes =
+            FindObjectsByType<CppCollision>(
+                FindObjectsInactive.Exclude);
+
+        foreach (CppCollision c in shapes)
+        {
+            if (c == null)
+                continue;
+
+            c.Recalculate();
+
+            DrawShape(c);
+        }
+
+        DrawPlayer();
+    }
+
+    private void DrawShape(CppCollision c)
+    {
+        switch (c.ResolvedMode)
+        {
+            case CppCollision.CollisionMode.Box:
+
+                Gizmos.color = boxColor;
+
+                Gizmos.DrawWireCube(
+                    c.WorldCenter,
+                    c.WorldSize);
+
+                if (drawFilled)
+                {
+                    Color fill = boxColor;
+                    fill.a = 0.10f;
+                    Gizmos.color = fill;
+
+                    Gizmos.DrawCube(
+                        c.WorldCenter,
+                        c.WorldSize);
+                }
+
+                break;
+
+            case CppCollision.CollisionMode.Sphere:
+
+                Gizmos.color = sphereColor;
+
+                Gizmos.DrawWireSphere(
+                    c.WorldCenter,
+                    c.Radius);
+
+                if (drawFilled)
+                {
+                    Color fill = sphereColor;
+                    fill.a = 0.10f;
+                    Gizmos.color = fill;
+
+                    Gizmos.DrawSphere(
+                        c.WorldCenter,
+                        c.Radius);
+                }
+
+                break;
+
+            case CppCollision.CollisionMode.Capsule:
+
+                Gizmos.color = capsuleColor;
+
+                // The C++ solver treats a capsule as a circle
+                // in X/Z of radius "Radius". Draw both the
+                // full 3D capsule and the flat horizontal
+                // circle the solver actually uses.
+
+                float cylinderHeight =
+                    Mathf.Max(
+                        0.0f,
+                        c.Height -
+                        c.Radius * 2.0f);
+
+                Vector3 top =
+                    c.WorldCenter +
+                    Vector3.up *
+                    (cylinderHeight * 0.5f);
+
+                Vector3 bottom =
+                    c.WorldCenter -
+                    Vector3.up *
+                    (cylinderHeight * 0.5f);
+
+                Gizmos.DrawWireSphere(
+                    top,
+                    c.Radius);
+
+                Gizmos.DrawWireSphere(
+                    bottom,
+                    c.Radius);
+
+                Gizmos.DrawLine(
+                    top + Vector3.right * c.Radius,
+                    bottom + Vector3.right * c.Radius);
+
+                Gizmos.DrawLine(
+                    top - Vector3.right * c.Radius,
+                    bottom - Vector3.right * c.Radius);
+
+                Gizmos.DrawLine(
+                    top + Vector3.forward * c.Radius,
+                    bottom + Vector3.forward * c.Radius);
+
+                Gizmos.DrawLine(
+                    top - Vector3.forward * c.Radius,
+                    bottom - Vector3.forward * c.Radius);
+
+                // The horizontal circle the solver actually uses.
+                DrawCircle(
+                    new Vector3(
+                        c.WorldCenter.x,
+                        0.0f,
+                        c.WorldCenter.z),
+                    c.Radius);
+
+                break;
+        }
+    }
+
+    private void DrawPlayer()
+    {
+        Vector3 p = new Vector3(
+            unity_game_get_player_x(),
+            unity_game_get_player_y(),
+            unity_game_get_player_z());
+
+        Gizmos.color = playerCircleColor;
+
+        // Small marker at the C++ position.
+        Gizmos.DrawWireSphere(p, 0.05f);
+
+        // The actual collision footprint used by the solver.
+        DrawCircle(
+            new Vector3(p.x, 0.0f, p.z),
+            playerCollisionRadius);
+
+        // Vertical line so you can see the player through
+        // other geometry.
+        Gizmos.DrawLine(
+            p,
+            p + Vector3.up * 2.0f);
+    }
+
+    private static void DrawCircle(
+        Vector3 center,
+        float radius)
+    {
+        const int segments = 48;
+
+        Vector3 prev =
+            center +
+            new Vector3(radius, 0.0f, 0.0f);
+
+        for (int i = 1; i <= segments; ++i)
+        {
+            float t =
+                (float)i /
+                (float)segments *
+                Mathf.PI * 2.0f;
+
+            Vector3 next =
+                center +
+                new Vector3(
+                    Mathf.Cos(t) * radius,
+                    0.0f,
+                    Mathf.Sin(t) * radius);
+
+            Gizmos.DrawLine(prev, next);
+
+            prev = next;
+        }
+    }
+}

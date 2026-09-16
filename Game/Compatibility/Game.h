@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "AuthoredBindings.h"
 #include "IDisplacementBackend.h"
 #include "Types.h"
@@ -21,7 +21,9 @@ void game_set_camera(
     Pose pose);
 
 // Host/test inspection hook.
-// Not necessarily part of the eventual backend-facing API.
 Pose game_get_camera_pose();
+
+// Host/test inspection hook for the currently active camera.
+CameraRef game_get_camera_ref();
 
 }

@@ -1,0 +1,634 @@
+using UnityEngine;
+
+[ExecuteAlways]
+public sealed class CppCollision : MonoBehaviour
+{
+    public enum CollisionMode
+    {
+        Auto,
+        Box,
+        Sphere,
+        Capsule,
+        Manual
+    }
+
+    public enum ManualShape
+    {
+        Box,
+        Sphere,
+        Capsule
+    }
+
+    [Header("Collision")]
+
+    [SerializeField]
+    private CollisionMode mode =
+        CollisionMode.Auto;
+
+    [SerializeField]
+    private ManualShape manualShape =
+        ManualShape.Box;
+
+    [Header("Manual Box")]
+
+    [SerializeField]
+    private Vector3 manualCenter =
+        Vector3.zero;
+
+    [SerializeField]
+    private Vector3 manualSize =
+        Vector3.one;
+
+    [Header("Manual Sphere")]
+
+    [SerializeField]
+    private float manualRadius =
+        0.5f;
+
+    [Header("Manual Capsule")]
+
+    [SerializeField]
+    private float manualHeight =
+        1.0f;
+
+    [Header("Debug")]
+
+    [SerializeField]
+    private bool showGizmo =
+        true;
+
+    public CollisionMode Mode =>
+        mode;
+
+    public CollisionMode ResolvedMode {
+        get;
+        private set;
+    }
+
+    public Vector3 WorldCenter {
+        get;
+        private set;
+    }
+
+    public Vector3 WorldSize {
+        get;
+        private set;
+    }
+
+    public float Radius {
+        get;
+        private set;
+    }
+
+    public float Height {
+        get;
+        private set;
+    }
+
+    private void Awake()
+    {
+        Recalculate();
+    }
+
+    private void OnEnable()
+    {
+        Recalculate();
+    }
+
+    private void OnValidate()
+    {
+        Recalculate();
+    }
+
+    public void Recalculate()
+    {
+        Bounds bounds;
+
+        if (!TryGetRendererBounds(
+                out bounds)) {
+
+            bounds =
+                new Bounds(
+                    transform.position,
+                    Vector3.one);
+        }
+
+        if (mode ==
+            CollisionMode.Manual) {
+
+            ApplyManual();
+
+            return;
+        }
+
+        WorldCenter =
+            bounds.center;
+
+        WorldSize =
+            bounds.size;
+
+        ResolvedMode =
+            ResolveAutoMode(
+                bounds);
+
+        switch (ResolvedMode)
+        {
+            case CollisionMode.Box:
+
+                Radius = 0.0f;
+
+                Height =
+                    bounds.size.y;
+
+                break;
+
+            case CollisionMode.Sphere:
+
+                // Bounding-sphere approximation.
+                //
+                // Half the diagonal guarantees that the sphere
+                // contains the measured bounds rather than
+                // underestimating the object's footprint.
+                Radius =
+                    bounds.extents.magnitude;
+
+                Height =
+                    bounds.size.y;
+
+                break;
+
+            case CollisionMode.Capsule:
+
+                Radius =
+                    Mathf.Max(
+                        bounds.extents.x,
+                        bounds.extents.z);
+
+                Height =
+                    Mathf.Max(
+                        bounds.size.y,
+                        Radius * 2.0f);
+
+                break;
+        }
+    }
+
+    private CollisionMode ResolveAutoMode(
+        Bounds bounds)
+    {
+        float width =
+            Mathf.Max(
+                bounds.size.x,
+                0.0001f);
+
+        float depth =
+            Mathf.Max(
+                bounds.size.z,
+                0.0001f);
+
+        float height =
+            Mathf.Max(
+                bounds.size.y,
+                0.0001f);
+
+        float horizontalMax =
+            Mathf.Max(
+                width,
+                depth);
+
+        float horizontalMin =
+            Mathf.Min(
+                width,
+                depth);
+
+        float horizontalRatio =
+            horizontalMin /
+            horizontalMax;
+
+        // Tall and narrow objects:
+        // people, dolls, poles, trees, etc.
+        if (height >
+            horizontalMax * 1.6f) {
+
+            return CollisionMode.Capsule;
+        }
+
+        // Compact objects: Box or Sphere.
+        //
+        // Bounds alone cannot distinguish a cube from a sphere
+        // because they have identical bounds. Inspect the actual
+        // mesh geometry using a volume-fill heuristic.
+        if (horizontalRatio >= 0.80f &&
+            height <=
+                horizontalMax * 1.35f &&
+            MeshIsRound()) {
+
+            return CollisionMode.Sphere;
+        }
+
+        return CollisionMode.Box;
+    }
+
+    private bool MeshIsRound()
+    {
+        // Compute mesh volume relative to bounding-box volume.
+        //
+        // Cube:   fill ratio ~= 1.00
+        // Sphere: fill ratio ~= 0.52
+        //
+        // Anything below ~0.70 is treated as a rounded shape.
+        // This prevents a Unity Cube from being classified as a
+        // Sphere, which would produce a much larger collision
+        // footprint than the visible object.
+
+        Renderer[] renderers =
+            GetComponentsInChildren<
+                Renderer>();
+
+        float totalMeshVolume =
+            0.0f;
+
+        Bounds combined =
+            new Bounds();
+
+        bool found =
+            false;
+
+        foreach (Renderer renderer
+                 in renderers)
+        {
+            if (renderer == null ||
+                !renderer.enabled) {
+
+                continue;
+            }
+
+            MeshFilter filter =
+                renderer.GetComponent<
+                    MeshFilter>();
+
+            if (filter == null ||
+                filter.sharedMesh == null) {
+
+                continue;
+            }
+
+            Mesh mesh =
+                filter.sharedMesh;
+
+            if (!mesh.isReadable) {
+                continue;
+            }
+
+            float volume =
+                ComputeMeshVolume(mesh);
+
+            Vector3 scale =
+                filter.transform.lossyScale;
+
+            float scaleFactor =
+                Mathf.Abs(
+                    scale.x *
+                    scale.y *
+                    scale.z);
+
+            float worldVolume =
+                volume * scaleFactor;
+
+            if (!found)
+            {
+                combined =
+                    renderer.bounds;
+
+                found = true;
+            }
+            else
+            {
+                combined.Encapsulate(
+                    renderer.bounds);
+            }
+
+            totalMeshVolume +=
+                worldVolume;
+        }
+
+        if (!found ||
+            totalMeshVolume <= 0.0f) {
+
+            return false;
+        }
+
+        float boundsVolume =
+            combined.size.x *
+            combined.size.y *
+            combined.size.z;
+
+        if (boundsVolume <= 0.0f) {
+            return false;
+        }
+
+        float fillRatio =
+            totalMeshVolume /
+            boundsVolume;
+
+        return fillRatio < 0.70f;
+    }
+
+    private static float ComputeMeshVolume(
+        Mesh mesh)
+    {
+        Vector3[] verts =
+            mesh.vertices;
+
+        int[] tris =
+            mesh.triangles;
+
+        float volume =
+            0.0f;
+
+        for (int i = 0;
+             i < tris.Length;
+             i += 3)
+        {
+            Vector3 a =
+                verts[tris[i]];
+
+            Vector3 b =
+                verts[tris[i + 1]];
+
+            Vector3 c =
+                verts[tris[i + 2]];
+
+            volume +=
+                Vector3.Dot(
+                    a,
+                    Vector3.Cross(b, c)) /
+                6.0f;
+        }
+
+        return Mathf.Abs(volume);
+    }
+
+    private void ApplyManual()
+    {
+        ResolvedMode =
+            mode;
+
+        switch (manualShape)
+        {
+            case ManualShape.Box:
+
+                WorldCenter =
+                    transform.TransformPoint(
+                        manualCenter);
+
+                WorldSize =
+                    Vector3.Scale(
+                        manualSize,
+                        AbsVector(
+                            transform.lossyScale));
+
+                Radius = 0.0f;
+
+                Height =
+                    WorldSize.y;
+
+                ResolvedMode =
+                    CollisionMode.Box;
+
+                break;
+
+            case ManualShape.Sphere:
+
+                WorldCenter =
+                    transform.TransformPoint(
+                        manualCenter);
+
+                Radius =
+                    Mathf.Abs(
+                        manualRadius) *
+                    MaxAbsScale(
+                        transform.lossyScale);
+
+                WorldSize =
+                    Vector3.one *
+                    Radius *
+                    2.0f;
+
+                Height =
+                    Radius * 2.0f;
+
+                ResolvedMode =
+                    CollisionMode.Sphere;
+
+                break;
+
+            case ManualShape.Capsule:
+
+                WorldCenter =
+                    transform.TransformPoint(
+                        manualCenter);
+
+                Radius =
+                    Mathf.Abs(
+                        manualRadius) *
+                    Mathf.Max(
+                        Mathf.Abs(
+                            transform.lossyScale.x),
+                        Mathf.Abs(
+                            transform.lossyScale.z));
+
+                Height =
+                    Mathf.Max(
+                        Mathf.Abs(
+                            manualHeight *
+                            transform.lossyScale.y),
+                        Radius * 2.0f);
+
+                WorldSize =
+                    new Vector3(
+                        Radius * 2.0f,
+                        Height,
+                        Radius * 2.0f);
+
+                ResolvedMode =
+                    CollisionMode.Capsule;
+
+                break;
+        }
+    }
+
+    private static Vector3 AbsVector(
+        Vector3 value)
+    {
+        return new Vector3(
+            Mathf.Abs(value.x),
+            Mathf.Abs(value.y),
+            Mathf.Abs(value.z));
+    }
+
+    private static float MaxAbsScale(
+        Vector3 value)
+    {
+        return Mathf.Max(
+            Mathf.Abs(value.x),
+            Mathf.Abs(value.y),
+            Mathf.Abs(value.z));
+    }
+
+    private bool TryGetRendererBounds(
+        out Bounds combined)
+    {
+        Renderer[] renderers =
+            GetComponentsInChildren<
+                Renderer>();
+
+        bool found =
+            false;
+
+        combined =
+            new Bounds();
+
+        foreach (Renderer renderer
+                 in renderers)
+        {
+            if (renderer == null ||
+                !renderer.enabled) {
+
+                continue;
+            }
+
+            if (!found)
+            {
+                combined =
+                    renderer.bounds;
+
+                found = true;
+            }
+            else
+            {
+                combined.Encapsulate(
+                    renderer.bounds);
+            }
+        }
+
+        return found;
+    }
+
+    public void SendToNative()
+    {
+        Recalculate();
+
+        switch (ResolvedMode)
+        {
+            case CollisionMode.Box:
+
+                NativeCollision.AddBox(
+                    WorldCenter,
+                    WorldSize * 0.5f);
+
+                break;
+
+            case CollisionMode.Sphere:
+
+                NativeCollision.AddSphere(
+                    WorldCenter,
+                    Radius);
+
+                break;
+
+            case CollisionMode.Capsule:
+
+                NativeCollision.AddCapsule(
+                    WorldCenter,
+                    Radius,
+                    Height);
+
+                break;
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (!showGizmo)
+            return;
+
+        Recalculate();
+
+        switch (ResolvedMode)
+        {
+            case CollisionMode.Box:
+
+                Gizmos.DrawWireCube(
+                    WorldCenter,
+                    WorldSize);
+
+                break;
+
+            case CollisionMode.Sphere:
+
+                Gizmos.DrawWireSphere(
+                    WorldCenter,
+                    Radius);
+
+                break;
+
+            case CollisionMode.Capsule:
+
+                DrawCapsuleGizmo();
+
+                break;
+        }
+    }
+
+    private void DrawCapsuleGizmo()
+    {
+        float cylinderHeight =
+            Mathf.Max(
+                0.0f,
+                Height -
+                Radius * 2.0f);
+
+        Vector3 top =
+            WorldCenter +
+            Vector3.up *
+            (cylinderHeight * 0.5f);
+
+        Vector3 bottom =
+            WorldCenter -
+            Vector3.up *
+            (cylinderHeight * 0.5f);
+
+        Gizmos.DrawWireSphere(
+            top,
+            Radius);
+
+        Gizmos.DrawWireSphere(
+            bottom,
+            Radius);
+
+        Vector3 right =
+            Vector3.right *
+            Radius;
+
+        Vector3 forward =
+            Vector3.forward *
+            Radius;
+
+        Gizmos.DrawLine(
+            top + right,
+            bottom + right);
+
+        Gizmos.DrawLine(
+            top - right,
+            bottom - right);
+
+        Gizmos.DrawLine(
+            top + forward,
+            bottom + forward);
+
+        Gizmos.DrawLine(
+            top - forward,
+            bottom - forward);
+    }
+}

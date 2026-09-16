@@ -1,0 +1,89 @@
+@echo off
+REM =====================================================================
+REM Builds dreamcast_horror.dll as 64-bit (x86_64) for the Unity Editor.
+REM =====================================================================
+
+setlocal enabledelayedexpansion
+
+REM Script location:
+REM <repo>\Unity\Dreamcast-Horror\
+REM Repo root is two directories above this script.
+
+pushd "%~dp0..\.." >nul
+set "REPO=%CD%\"
+popd >nul
+
+set "OUT=%~dp0Assets\Plugins\x86_64"
+
+REM --- Locate Visual Studio via vswhere -------------------------------
+
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+
+if not exist "%VSWHERE%" (
+    echo ERROR: vswhere.exe not found.
+    echo Install Visual Studio with the "Desktop development with C++" workload.
+    pause
+    exit /b 1
+)
+
+set "VSPATH="
+
+for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * ^
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
+    -property installationPath`) do set "VSPATH=%%i"
+
+if "%VSPATH%"=="" (
+    echo ERROR: No Visual Studio with C++ x64 tools found.
+    pause
+    exit /b 1
+)
+
+REM --- Initialize x64 MSVC toolchain ---------------------------------
+
+call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+if errorlevel 1 (
+    echo.
+    echo ERROR: vcvarsall.bat x64 failed.
+    pause
+    exit /b 1
+)
+
+if not exist "%OUT%" mkdir "%OUT%"
+
+echo.
+echo ============================================================
+echo Building dreamcast_horror.dll (x64)...
+echo ============================================================
+echo.
+
+cl /nologo /std:c++17 /O2 /EHsc /LD ^
+    "%REPO%UnityBridge.cpp" ^
+    "%REPO%Game\Compatibility\Game.cpp" ^
+"%REPO%Game\Compatibility\StaticCollisionBackend.cpp" ^
+    "%REPO%Game\Gameplay\Player.cpp" ^
+    /I "%REPO%Game\Compatibility" ^
+    /I "%REPO%Game\Core" ^
+    /I "%REPO%Game\Gameplay" ^
+    /Fe:"%OUT%\dreamcast_horror.dll"
+
+if errorlevel 1 (
+    echo.
+    echo ============================================================
+    echo BUILD FAILED.
+    echo ============================================================
+    pause
+    exit /b 1
+)
+
+echo.
+echo ============================================================
+echo BUILD SUCCEEDED:
+echo %OUT%\dreamcast_horror.dll
+echo ============================================================
+echo.
+echo Return to Unity; it will reimport the plugin automatically.
+echo.
+
+pause
+endlocal
