@@ -5,4 +5,7 @@
 struct GameState {
     ActorRef playerActor;
     Vec3 playerPos;
+
+    CameraRef gameplayCamera;
+    Pose cameraPose;
 };

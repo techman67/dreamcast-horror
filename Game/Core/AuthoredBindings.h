@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Types.h"
 
 // Stable opaque identifier for an authored actor.
@@ -25,4 +25,5 @@ struct SliceBindings {
     ActorRef playerActor;
     CameraRef gameplayCamera;
     Pose initialPlayerPose;
+    Pose initialCameraPose;
 };

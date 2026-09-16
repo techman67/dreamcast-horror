@@ -15,4 +15,9 @@ void game_step(
 
 Vec3 game_get_player_pos();
 
+// Host/test inspection hook.
+// NOT part of the eventual gameplay compatibility API unless
+// Unity/Simulant demonstrates a need for it.
+Pose game_get_camera_pose();
+
 }

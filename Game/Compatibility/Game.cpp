@@ -12,9 +12,14 @@ extern "C" void game_init(
     IDisplacementBackend* displacement) {
 
     g_displacement = displacement;
+
     g_state = GameState{};
+
     g_state.playerActor = bindings.playerActor;
     g_state.playerPos = bindings.initialPlayerPose.position;
+
+    g_state.gameplayCamera = bindings.gameplayCamera;
+    g_state.cameraPose = bindings.initialCameraPose;
 }
 
 extern "C" void game_step(
@@ -30,4 +35,8 @@ extern "C" void game_step(
 
 extern "C" Vec3 game_get_player_pos() {
     return g_state.playerPos;
+}
+
+extern "C" Pose game_get_camera_pose() {
+    return g_state.cameraPose;
 }
