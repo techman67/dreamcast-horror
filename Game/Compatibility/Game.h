@@ -15,9 +15,13 @@ void game_step(
 
 Vec3 game_get_player_pos();
 
+// Select the active authored fixed/hybrid gameplay camera.
+void game_set_camera(
+    CameraRef camera,
+    Pose pose);
+
 // Host/test inspection hook.
-// NOT part of the eventual gameplay compatibility API unless
-// Unity/Simulant demonstrates a need for it.
+// Not necessarily part of the eventual backend-facing API.
 Pose game_get_camera_pose();
 
 }

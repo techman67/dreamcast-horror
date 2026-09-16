@@ -1,4 +1,6 @@
-﻿# MSVC / C++ build artifacts
+﻿# =========================
+# C++ / MSVC build artifacts
+# =========================
 *.obj
 *.exe
 *.pdb
@@ -7,3 +9,30 @@
 *.suo
 *.user
 *.vcxproj.user
+
+# =========================
+# Unity generated files
+# =========================
+Unity/**/Library/
+Unity/**/Temp/
+Unity/**/Logs/
+Unity/**/Obj/
+Unity/**/Build/
+Unity/**/Builds/
+Unity/**/MemoryCaptures/
+Unity/**/UserSettings/
+
+# Unity generated IDE/project files
+Unity/**/*.csproj
+Unity/**/*.sln
+Unity/**/*.slnx
+Unity/**/*.userprefs
+
+# Unity generated local state
+Unity/**/.vs/
+
+# =========================
+# OS/editor junk
+# =========================
+.DS_Store
+Thumbs.db

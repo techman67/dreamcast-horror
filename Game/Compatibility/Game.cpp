@@ -37,6 +37,14 @@ extern "C" Vec3 game_get_player_pos() {
     return g_state.playerPos;
 }
 
+extern "C" void game_set_camera(
+    CameraRef camera,
+    Pose pose) {
+
+    g_state.gameplayCamera = camera;
+    g_state.cameraPose = pose;
+}
+
 extern "C" Pose game_get_camera_pose() {
     return g_state.cameraPose;
 }
