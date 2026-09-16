@@ -1,0 +1,24 @@
+#include "Game.h"
+#include "GameState.h"
+#include "Player.h"
+
+namespace {
+    GameState g_state{};
+    IDisplacementBackend* g_displacement = nullptr;
+}
+
+extern "C" void game_init(IDisplacementBackend* displacement) {
+    g_displacement = displacement;
+    g_state = GameState{};
+}
+
+extern "C" void game_step(const InputFrame* input, float deltaSeconds) {
+    if (input == nullptr || g_displacement == nullptr) {
+        return;
+    }
+    playerUpdate(g_state, *g_displacement, *input, deltaSeconds);
+}
+
+extern "C" Vec3 game_get_player_pos() {
+    return g_state.playerPos;
+}
