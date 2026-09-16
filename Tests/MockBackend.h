@@ -1,22 +1,22 @@
-#pragma once
+﻿#pragma once
 #include "IDisplacementBackend.h"
 
-// Deterministic, scriptable mock of IDisplacementBackend.
-// Records the last request so tests can assert what Game asked for,
-// and returns a scripted response so tests can control the result.
 class MockBackend : public IDisplacementBackend {
 public:
-    // Scripted response for the next resolveMove call.
     Vec3 nextResolvedDelta{};
     bool nextBlocked = false;
     bool useScriptedResponse = false;
 
-    // Last observed request (for assertions).
+    ActorRef lastActor{};
     Vec3 lastPosition{};
     Vec3 lastDesiredDelta{};
 
-    DisplacementResult resolveMove(const Vec3& position,
-                                   const Vec3& desiredDelta) override {
+    DisplacementResult resolveMove(
+        const ActorRef& actor,
+        const Vec3& position,
+        const Vec3& desiredDelta) override {
+
+        lastActor = actor;
         lastPosition = position;
         lastDesiredDelta = desiredDelta;
 
@@ -24,7 +24,6 @@ public:
             return { nextResolvedDelta, nextBlocked };
         }
 
-        // Default: allow the full requested displacement.
         return { desiredDelta, false };
     }
 };

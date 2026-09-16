@@ -1,4 +1,5 @@
-#pragma once
+﻿#pragma once
+#include "AuthoredBindings.h"
 #include "Types.h"
 
 // Result of resolving a desired kinematic displacement against the world.
@@ -17,9 +18,12 @@ class IDisplacementBackend {
 public:
     virtual ~IDisplacementBackend() = default;
 
-    // Resolve a desired displacement from a given position.
+    // Resolve a desired displacement for a specific authored actor.
+    //
     // The backend must never mutate Game state; it only reports what
     // displacement it is willing to allow.
-    virtual DisplacementResult resolveMove(const Vec3& position,
-                                           const Vec3& desiredDelta) = 0;
+    virtual DisplacementResult resolveMove(
+        const ActorRef& actor,
+        const Vec3& position,
+        const Vec3& desiredDelta) = 0;
 };

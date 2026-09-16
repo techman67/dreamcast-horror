@@ -1,4 +1,4 @@
-#include <cassert>
+﻿#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include "AuthoredBindings.h"
@@ -11,7 +11,7 @@ static bool nearlyEqual(float a, float b, float eps = 0.001f) {
 
 int main() {
     SliceBindings bindings{};
-    bindings.playerActor.id = 1;
+    bindings.playerActor.id = 42;
     bindings.gameplayCamera.id = 2;
     bindings.initialPlayerPose.position = {10.0f, 0.0f, 20.0f};
     bindings.initialPlayerPose.yaw = 0.0f;
@@ -34,6 +34,15 @@ int main() {
 
     game_step(&forward, 1.0f);
 
+    assert(backend.lastActor.id == 42);
+    assert(nearlyEqual(backend.lastPosition.x, 10.0f));
+    assert(nearlyEqual(backend.lastPosition.y, 0.0f));
+    assert(nearlyEqual(backend.lastPosition.z, 20.0f));
+
+    assert(nearlyEqual(backend.lastDesiredDelta.x, 0.0f));
+    assert(nearlyEqual(backend.lastDesiredDelta.y, 0.0f));
+    assert(nearlyEqual(backend.lastDesiredDelta.z, 1.0f));
+
     pos = game_get_player_pos();
 
     assert(nearlyEqual(pos.x, 10.0f));
@@ -41,8 +50,8 @@ int main() {
     assert(nearlyEqual(pos.z, 21.0f));
 
     std::printf(
-        "Forward movement passed: (%.3f, %.3f, %.3f)\n",
-        pos.x, pos.y, pos.z
+        "Actor identity and movement request passed: actor=%u\n",
+        backend.lastActor.id
     );
 
     backend.useScriptedResponse = true;
@@ -62,6 +71,6 @@ int main() {
         pos.x, pos.y, pos.z
     );
 
-    std::printf("Init-from-bindings tests passed.\n");
+    std::printf("Actor-binding movement tests passed.\n");
     return 0;
 }

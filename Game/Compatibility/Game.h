@@ -1,20 +1,18 @@
-#pragma once
+﻿#pragma once
 #include "AuthoredBindings.h"
 #include "IDisplacementBackend.h"
 #include "Types.h"
 
 extern "C" {
 
-// Initialise the Game with authored bindings and a displacement backend.
-// GameState.playerPos is initialised from bindings.initialPlayerPose.position.
-void game_init(SliceBindings bindings, IDisplacementBackend* displacement);
+void game_init(
+    SliceBindings bindings,
+    IDisplacementBackend* displacement);
 
-// Advance the Game by one frame.
-// input may be null, in which case the Game performs no work this frame.
-void game_step(const InputFrame* input, float deltaSeconds);
+void game_step(
+    const InputFrame* input,
+    float deltaSeconds);
 
-// Host/test inspection hook. NOT part of the eventual gameplay
-// compatibility API unless Unity/Simulant demonstrates a need for it.
 Vec3 game_get_player_pos();
 
 }

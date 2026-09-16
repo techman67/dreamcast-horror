@@ -1,4 +1,4 @@
-#include "Game.h"
+﻿#include "Game.h"
 #include "GameState.h"
 #include "Player.h"
 
@@ -13,6 +13,7 @@ extern "C" void game_init(
 
     g_displacement = displacement;
     g_state = GameState{};
+    g_state.playerActor = bindings.playerActor;
     g_state.playerPos = bindings.initialPlayerPose.position;
 }
 
