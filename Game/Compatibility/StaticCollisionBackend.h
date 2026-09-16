@@ -6,7 +6,8 @@ class StaticCollisionBackend : public IDisplacementBackend {
 public:
     StaticCollisionBackend();
 
-    void configure(
+    // Reject invalid/oversized input; never silently truncate the obstacle set.
+    bool configure(
         const CollisionShape* shapes,
         unsigned int shapeCount,
         float playerRadius);

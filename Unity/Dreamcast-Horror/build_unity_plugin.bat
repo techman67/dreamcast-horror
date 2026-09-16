@@ -15,7 +15,7 @@ set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
 if not exist "%VSWHERE%" (
     echo ERROR: vswhere.exe not found.
-    pause
+    if not "%~1"=="--non-interactive" pause
     exit /b 1
 )
 
@@ -24,18 +24,22 @@ for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Mi
 
 if "%VSPATH%"=="" (
     echo ERROR: No Visual Studio with C++ x64 tools found.
-    pause
+    if not "%~1"=="--non-interactive" pause
     exit /b 1
 )
 
 call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
 if errorlevel 1 (
     echo ERROR: vcvarsall.bat x64 failed.
-    pause
+    if not "%~1"=="--non-interactive" pause
     exit /b 1
 )
 
 if not exist "%OUT%" mkdir "%OUT%"
+set "BUILD=%TEMP%\dreamcast-horror-build-%RANDOM%-%RANDOM%"
+mkdir "%BUILD%"
+if errorlevel 1 exit /b 1
+pushd "%BUILD%"
 
 echo.
 echo ============================================================
@@ -43,14 +47,16 @@ echo Building dreamcast_horror.dll (x64)...
 echo ============================================================
 echo.
 
-cl /nologo /std:c++17 /O2 /EHsc /LD "%REPO%\UnityBridge.cpp" "%REPO%\Game\Compatibility\Game.cpp" "%REPO%\Game\Compatibility\StaticCollisionBackend.cpp" "%REPO%\Game\Gameplay\Player.cpp" /I "%REPO%\Game\Compatibility" /I "%REPO%\Game\Core" /I "%REPO%\Game\Gameplay" /Fe:"%OUT%\dreamcast_horror.dll"
+cl /nologo /std:c++17 /O2 /EHsc /LD "%REPO%\UnityBridge.cpp" "%REPO%\Game\Core\RoomData.cpp" "%REPO%\Game\Compatibility\Game.cpp" "%REPO%\Game\Compatibility\StaticCollisionBackend.cpp" "%REPO%\Game\Gameplay\Player.cpp" /I "%REPO%\Game\Compatibility" /I "%REPO%\Game\Core" /I "%REPO%\Game\Gameplay" /Fe:"%OUT%\dreamcast_horror.dll" /link /IMPLIB:"%BUILD%\dreamcast_horror.lib"
 
-if errorlevel 1 (
+set "BUILD_RESULT=%ERRORLEVEL%"
+popd
+if not "%BUILD_RESULT%"=="0" (
     echo.
     echo ============================================================
     echo BUILD FAILED.
     echo ============================================================
-    pause
+    if not "%~1"=="--non-interactive" pause
     exit /b 1
 )
 
@@ -63,5 +69,5 @@ echo.
 echo Return to Unity; it will reimport the plugin automatically.
 echo.
 
-pause
+if not "%~1"=="--non-interactive" pause
 endlocal

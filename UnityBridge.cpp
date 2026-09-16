@@ -1,243 +1,80 @@
-#include <cmath>
-
+#include <exception>
 #include "Game.h"
+#include "RoomData.h"
 #include "StaticCollisionBackend.h"
 
 namespace {
-
-    CollisionShape g_collisionShapes[
-        MaxStaticCollisionShapes
-    ]{};
-
-    unsigned int g_collisionShapeCount =
-        0;
-
+    RoomData g_room{};
     StaticCollisionBackend g_collisionBackend{};
-
-    constexpr float playerCollisionRadius =
-        0.35f;
+    const char* g_error = "Game has not been initialized.";
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_collision_clear() {
-
-    g_collisionShapeCount =
-        0;
-}
-
-extern "C" __declspec(dllexport)
-void unity_game_collision_add_box(
-    float centerX,
-    float centerY,
-    float centerZ,
-    float halfX,
-    float halfY,
-    float halfZ) {
-
-    if (g_collisionShapeCount >=
-        MaxStaticCollisionShapes) {
-
-        return;
+int unity_game_init(const char* roomText) {
+    // A failed reload cannot continue running the previous room.
+    game_init(SliceBindings{}, nullptr);
+    try {
+        g_error = parseRoomData(roomText, g_room);
+        if (g_error != nullptr) return 0;
+        if (!g_collisionBackend.configure(g_room.shapes, g_room.shapeCount,
+                                          g_room.bindings.playerCollisionRadius)) {
+            g_error = "Invalid static collision configuration.";
+            return 0;
+        }
+        game_init(g_room.bindings, &g_collisionBackend);
+        return 1;
+    } catch (const std::exception&) {
+        // Never propagate a C++ exception across P/Invoke.
+        g_error = "Unable to allocate or parse room startup data.";
+        return 0;
     }
-
-    CollisionShape& shape =
-        g_collisionShapes[
-            g_collisionShapeCount++
-        ];
-
-    shape =
-        CollisionShape{};
-
-    shape.type =
-        CollisionShapeType::Box;
-
-    shape.center =
-        Vec3{
-            centerX,
-            centerY,
-            centerZ
-        };
-
-    shape.halfExtents =
-        Vec3{
-            std::fabs(halfX),
-            std::fabs(halfY),
-            std::fabs(halfZ)
-        };
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_collision_add_sphere(
-    float centerX,
-    float centerY,
-    float centerZ,
-    float radius) {
+const char* unity_game_get_error() { return g_error; }
 
-    if (g_collisionShapeCount >=
-        MaxStaticCollisionShapes) {
-
-        return;
+extern "C" __declspec(dllexport)
+const char* unity_game_validate_room(const char* text) {
+    try {
+        RoomData candidate{};
+        return parseRoomData(text, candidate);
+    } catch (const std::exception&) {
+        return "Unable to allocate or parse room startup data.";
     }
-
-    CollisionShape& shape =
-        g_collisionShapes[
-            g_collisionShapeCount++
-        ];
-
-    shape =
-        CollisionShape{};
-
-    shape.type =
-        CollisionShapeType::Sphere;
-
-    shape.center =
-        Vec3{
-            centerX,
-            centerY,
-            centerZ
-        };
-
-    shape.radius =
-        std::fabs(radius);
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_collision_add_capsule(
-    float centerX,
-    float centerY,
-    float centerZ,
-    float radius,
-    float height) {
+unsigned int unity_game_get_shape_count() { return g_error == nullptr ? g_room.shapeCount : 0; }
 
-    if (g_collisionShapeCount >=
-        MaxStaticCollisionShapes) {
-
-        return;
-    }
-
-    CollisionShape& shape =
-        g_collisionShapes[
-            g_collisionShapeCount++
-        ];
-
-    shape =
-        CollisionShape{};
-
-    shape.type =
-        CollisionShapeType::Capsule;
-
-    shape.center =
-        Vec3{
-            centerX,
-            centerY,
-            centerZ
-        };
-
-    shape.radius =
-        std::fabs(radius);
-
-    shape.height =
-        std::fabs(height);
+extern "C" __declspec(dllexport)
+int unity_game_get_shape(unsigned int index, CollisionShape* shape) {
+    if (g_error != nullptr || shape == nullptr || index >= g_room.shapeCount) return 0;
+    *shape = g_room.shapes[index];
+    return 1;
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_init() {
-
-    g_collisionBackend.configure(
-        g_collisionShapes,
-        g_collisionShapeCount,
-        playerCollisionRadius);
-
-    SliceBindings bindings{};
-
-    bindings.playerActor =
-        ActorRef{1};
-
-    bindings.gameplayCamera =
-        CameraRef{1};
-
-    bindings.initialPlayerPose.position =
-        Vec3{
-            0.0f,
-            0.0f,
-            0.0f
-        };
-
-    bindings.initialPlayerPose.yaw =
-        0.0f;
-
-    bindings.initialCameraPose.position =
-        Vec3{
-            0.0f,
-            2.4f,
-            -3.8f
-        };
-
-    bindings.initialCameraPose.yaw =
-        0.0f;
-
-    bindings.cameraTransition.cameraA =
-        CameraRef{1};
-
-    bindings.cameraTransition.cameraB =
-        CameraRef{2};
-
-    bindings.cameraTransition.boundaryZ =
-        0.8f;
-
-    bindings.cameraTransition.halfWidthX =
-        4.0f;
-
-    bindings.playerCollisionRadius =
-        playerCollisionRadius;
-
-    game_init(
-        bindings,
-        &g_collisionBackend);
+void unity_game_step(float moveX, float moveY, float deltaSeconds) {
+    const InputFrame input{{moveX, moveY}, false};
+    game_step(&input, deltaSeconds);
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_step(
-    float moveX,
-    float moveY,
-    float deltaSeconds) {
-
-    InputFrame input{};
-
-    input.move.x =
-        moveX;
-
-    input.move.y =
-        moveY;
-
-    input.interactPressed =
-        false;
-
-    game_step(
-        &input,
-        deltaSeconds);
-}
+float unity_game_get_player_x() { return game_get_player_pos().x; }
 
 extern "C" __declspec(dllexport)
-float unity_game_get_player_x() {
-
-    return game_get_player_pos().x;
-}
+float unity_game_get_player_y() { return game_get_player_pos().y; }
 
 extern "C" __declspec(dllexport)
-float unity_game_get_player_y() {
-
-    return game_get_player_pos().y;
-}
+float unity_game_get_player_z() { return game_get_player_pos().z; }
 
 extern "C" __declspec(dllexport)
-float unity_game_get_player_z() {
-
-    return game_get_player_pos().z;
-}
+float unity_game_get_player_radius() { return g_room.bindings.playerCollisionRadius; }
 
 extern "C" __declspec(dllexport)
-unsigned int unity_game_get_camera_id() {
+unsigned int unity_game_get_camera_id() { return game_get_camera_ref().id; }
 
-    return game_get_camera_ref().id;
+extern "C" __declspec(dllexport)
+void unity_game_get_camera_pose(Pose* pose) {
+    if (pose != nullptr) *pose = game_get_camera_pose();
 }

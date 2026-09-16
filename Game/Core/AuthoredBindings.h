@@ -15,6 +15,9 @@ struct CameraRef {
 struct Pose {
     Vec3 position;
     float yaw = 0.0f;
+    // Radians; rotation order is roll (Z), pitch (X), then yaw (Y).
+    float pitch = 0.0f;
+    float roll = 0.0f;
 };
 
 // Supported Dreamcast-friendly collision primitives.
@@ -57,6 +60,8 @@ constexpr unsigned int MaxStaticCollisionShapes = 128;
 struct CameraTransition {
     CameraRef cameraA;
     CameraRef cameraB;
+    Pose poseA;
+    Pose poseB;
 
     float boundaryZ = 0.0f;
     float halfWidthX = 0.0f;

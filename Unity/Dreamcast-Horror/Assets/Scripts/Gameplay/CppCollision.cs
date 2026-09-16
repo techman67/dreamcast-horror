@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [ExecuteAlways]
 public sealed class CppCollision : MonoBehaviour
 {
+    private static readonly List<CppCollision> activeShapes = new List<CppCollision>();
+    public static IReadOnlyList<CppCollision> ActiveShapes => activeShapes;
     public enum CollisionMode
     {
         Auto,
@@ -105,7 +108,13 @@ public sealed class CppCollision : MonoBehaviour
 
     private void OnEnable()
     {
+        if (!activeShapes.Contains(this)) activeShapes.Add(this);
         Recalculate();
+    }
+
+    private void OnDisable()
+    {
+        activeShapes.Remove(this);
     }
 
     private void OnValidate()
@@ -140,9 +149,9 @@ public sealed class CppCollision : MonoBehaviour
         WorldSize =
             bounds.size;
 
-        ResolvedMode =
-            ResolveAutoMode(
-                bounds);
+        ResolvedMode = mode == CollisionMode.Auto
+            ? ResolveAutoMode(bounds)
+            : mode;
 
         switch (ResolvedMode)
         {
@@ -159,10 +168,8 @@ public sealed class CppCollision : MonoBehaviour
 
                 // Horizontal radius.
                 //
-                // Sphere mode is only chosen after the mesh
-                // has passed the roundness check, so the
-                // object is genuinely round and the max
-                // horizontal extent IS the actual radius.
+                // Auto mode checks roundness; explicit Sphere mode
+                // deliberately uses a horizontal circular footprint.
                 //
                 // The old half-diagonal formula was a
                 // conservative bound for irregular meshes.
@@ -525,46 +532,12 @@ public sealed class CppCollision : MonoBehaviour
         return found;
     }
 
-    public void SendToNative()
-    {
-        Recalculate();
-
-        switch (ResolvedMode)
-        {
-            case CollisionMode.Box:
-
-                NativeCollision.AddBox(
-                    WorldCenter,
-                    WorldSize * 0.5f);
-
-                break;
-
-            case CollisionMode.Sphere:
-
-                NativeCollision.AddSphere(
-                    WorldCenter,
-                    Radius);
-
-                break;
-
-            case CollisionMode.Capsule:
-
-                NativeCollision.AddCapsule(
-                    WorldCenter,
-                    Radius,
-                    Height);
-
-                break;
-        }
-    }
-
     private void OnDrawGizmosSelected()
     {
         if (!showGizmo)
             return;
 
-        Recalculate();
-
+        // Refresh through OnValidate or the export command, not every repaint.
         switch (ResolvedMode)
         {
             case CollisionMode.Box:

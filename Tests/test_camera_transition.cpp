@@ -48,6 +48,11 @@ SliceBindings makeBindings() {
     bindings.cameraTransition.cameraB =
         CameraRef{2};
 
+    bindings.cameraTransition.poseA = bindings.initialCameraPose;
+    bindings.cameraTransition.poseB.position = {4.06f, 3.05f, 4.74f};
+    bindings.cameraTransition.poseB.yaw = -2.35619449f;
+    bindings.cameraTransition.poseB.pitch = 0.38f;
+
     // Unity-authored boundary.
     bindings.cameraTransition.boundaryZ = 0.8f;
 
@@ -103,6 +108,9 @@ int main() {
             game_get_player_pos().z - 0.9f) < 0.0001f);
 
     assertCamera(2);
+
+    assert(std::fabs(game_get_camera_pose().position.x - 4.06f) < 0.0001f);
+    assert(std::fabs(game_get_camera_pose().pitch - 0.38f) < 0.0001f);
 
     // Continue forward.
     // Camera 02 remains active.
@@ -181,6 +189,41 @@ int main() {
         "Forward crossing: Camera 01 -> Camera 02\n"
         "Backward crossing: Camera 02 -> Camera 01\n"
         "Outside transition width: no switch\n");
+
+    // Landing exactly on the boundary then reversing must work in both directions.
+    game_init(bindings, &backend);
+    game_step(&forward, 0.8f);
+    assertCamera(2);
+    game_step(&backward, 0.1f);
+    assertCamera(1);
+    assert(std::fabs(game_get_camera_pose().position.y - 2.4f) < 0.0001f);
+    bindings.initialPlayerPose.position.z = 1.6f;
+    bindings.gameplayCamera = CameraRef{2};
+    bindings.initialCameraPose = bindings.cameraTransition.poseB;
+    game_init(bindings, &backend);
+    game_step(&backward, 0.8f);
+    assertCamera(1);
+    game_step(&forward, 0.1f);
+    assertCamera(2);
+
+    // Starting on the boundary, stationary or moving sideways, must not switch.
+    bindings.initialPlayerPose.position = {0, 0, 0.8f};
+    game_init(bindings, &backend);
+    InputFrame idle{};
+    game_step(&idle, 1.0f);
+    game_step(&right, 0.1f);
+    assertCamera(2);
+    game_step(&backward, 0.1f);
+    assertCamera(1);
+
+    // An absent transition must not replace a valid camera with ID zero.
+    bindings.cameraTransition = CameraTransition{};
+    bindings.initialPlayerPose.position = {0, 0, -1};
+    bindings.gameplayCamera = CameraRef{7};
+    game_init(bindings, &backend);
+    game_step(&forward, 2.0f);
+    assertCamera(7);
+    std::puts("Boundary reversal, pose synchronization and disabled-transition tests passed.");
 
     return 0;
 }

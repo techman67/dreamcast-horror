@@ -19,6 +19,12 @@ namespace {
 
     void updateCameraTransition() {
 
+        // Zero IDs mean no transition was authored (e.g. single-camera tests).
+        if (g_state.cameraTransition.cameraA.id == 0 ||
+            g_state.cameraTransition.cameraB.id == 0) {
+            return;
+        }
+
         const float boundary =
             g_state.cameraTransition.boundaryZ;
 
@@ -29,12 +35,12 @@ namespace {
             g_state.playerPos.z;
 
         const bool crossedForward =
-            previousZ < boundary &&
-            currentZ >= boundary;
+            previousZ <= boundary &&
+            currentZ >= boundary && currentZ > previousZ;
 
         const bool crossedBackward =
-            previousZ > boundary &&
-            currentZ <= boundary;
+            previousZ >= boundary &&
+            currentZ <= boundary && currentZ < previousZ;
 
         if (!crossedForward &&
             !crossedBackward) {
@@ -79,11 +85,13 @@ namespace {
 
             g_state.gameplayCamera =
                 g_state.cameraTransition.cameraB;
+            g_state.cameraPose = g_state.cameraTransition.poseB;
         }
         else {
 
             g_state.gameplayCamera =
                 g_state.cameraTransition.cameraA;
+            g_state.cameraPose = g_state.cameraTransition.poseA;
         }
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -9,8 +11,8 @@ public sealed class NativeGameBridge :
         "dreamcast_horror",
         CallingConvention =
             CallingConvention.Cdecl)]
-    private static extern void
-        unity_game_init();
+    private static extern int
+        unity_game_init([MarshalAs(UnmanagedType.LPStr)] string roomText);
 
     [DllImport(
         "dreamcast_horror",
@@ -50,6 +52,29 @@ public sealed class NativeGameBridge :
     private static extern uint
         unity_game_get_camera_id();
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePose
+    {
+        public float x, y, z, yaw, pitch, roll;
+    }
+
+    [DllImport("dreamcast_horror", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void unity_game_get_camera_pose(out NativePose pose);
+
+    [DllImport("dreamcast_horror", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr unity_game_get_error();
+
+    public static bool IsInitialized { get; private set; }
+    public const string RoomFileName = "sample.room";
+
+    [Header("Room export settings (runtime reads sample.room)")]
+    [SerializeField, Min(0.001f)] private float authoredPlayerRadius = 0.35f;
+    [SerializeField, Range(1, 2)] private int authoredInitialCamera = 1;
+    public float AuthoredPlayerRadius => authoredPlayerRadius;
+    public int AuthoredInitialCamera => authoredInitialCamera;
+
+    public static NativeRoomDiagnostics.Shape[] LoadedShapes { get; private set; }
+
     [Header("Authored Gameplay Cameras")]
 
     [SerializeField]
@@ -59,14 +84,41 @@ public sealed class NativeGameBridge :
     private Camera gameplayCamera02;
 
     private uint lastCameraId = 0;
+    private bool initialized;
+
+    private void OnEnable()
+    {
+        // Re-enabling the host resumes the same native room and debug snapshot.
+        if (initialized) IsInitialized = true;
+    }
 
     private void Start()
     {
+        initialized = false;
+        IsInitialized = false;
+        LoadedShapes = null;
         ResolveAuthoredCameras();
+        if (gameplayCamera01 == null || gameplayCamera02 == null)
+        {
+            enabled = false;
+            return;
+        }
 
-        BuildNativeCollision();
-
-        unity_game_init();
+        try
+        {
+            string roomText = File.ReadAllText(Path.Combine(Application.streamingAssetsPath, RoomFileName));
+            if (unity_game_init(roomText) == 0)
+                throw new InvalidDataException(Marshal.PtrToStringAnsi(unity_game_get_error()));
+            LoadedShapes = NativeRoomDiagnostics.Snapshot();
+            initialized = true;
+            IsInitialized = true;
+        }
+        catch (Exception error)
+        {
+            Debug.LogError($"Unable to initialize native game: {error.Message}", this);
+            enabled = false;
+            return;
+        }
 
         Debug.Log(
             $"C++ game initialized. " +
@@ -78,8 +130,20 @@ public sealed class NativeGameBridge :
         ApplyActiveCamera(true);
     }
 
+    private void OnDisable()
+    {
+        IsInitialized = false;
+    }
+
+    private void OnDestroy()
+    {
+        IsInitialized = false;
+        LoadedShapes = null;
+    }
+
     private void Update()
     {
+        if (!IsInitialized) return;
         float moveX = 0.0f;
         float moveY = 0.0f;
 
@@ -107,26 +171,6 @@ public sealed class NativeGameBridge :
             Time.deltaTime);
 
         ApplyActiveCamera(false);
-    }
-
-    private void BuildNativeCollision()
-    {
-        NativeCollision.Clear();
-
-        CppCollision[] collisions =
-            FindObjectsByType<CppCollision>(
-                FindObjectsInactive.Exclude);
-
-        foreach (CppCollision collision
-                 in collisions)
-        {
-            collision.SendToNative();
-        }
-
-        Debug.Log(
-            $"Native collision built from " +
-            $"{collisions.Length} " +
-            $"CppCollision components.");
     }
 
     private void ResolveAuthoredCameras()
@@ -230,6 +274,11 @@ public sealed class NativeGameBridge :
 
             return;
         }
+
+        unity_game_get_camera_pose(out NativePose pose);
+        activeCamera.transform.SetPositionAndRotation(
+            new Vector3(pose.x, pose.y, pose.z),
+            Quaternion.Euler(pose.pitch * Mathf.Rad2Deg, pose.yaw * Mathf.Rad2Deg, pose.roll * Mathf.Rad2Deg));
 
         if (gameplayCamera01 != null)
         {

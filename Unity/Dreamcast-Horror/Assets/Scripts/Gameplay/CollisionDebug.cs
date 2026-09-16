@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -59,39 +60,49 @@ public sealed class CollisionDebug : MonoBehaviour
     private static extern float
         unity_game_get_player_z();
 
+    [DllImport("dreamcast_horror", CallingConvention = CallingConvention.Cdecl)]
+    private static extern float unity_game_get_player_radius();
+
     private void OnDrawGizmos()
     {
         if (!Enabled)
             return;
 
-        CppCollision[] shapes =
-            FindObjectsByType<CppCollision>(
-                FindObjectsInactive.Exclude);
-
-        foreach (CppCollision c in shapes)
+        if (Application.isPlaying)
         {
-            if (c == null)
-                continue;
-
-            c.Recalculate();
-
-            DrawShape(c);
+            if (!NativeGameBridge.IsInitialized || NativeGameBridge.LoadedShapes == null) return;
+            foreach (NativeRoomDiagnostics.Shape shape in NativeGameBridge.LoadedShapes)
+                DrawShape(shape);
+        }
+        else
+        {
+            // No scene searches, vertex copies or native calls during edit-mode repaint.
+            for (int i = 0; i < CppCollision.ActiveShapes.Count; ++i)
+            {
+                CppCollision c = CppCollision.ActiveShapes[i];
+                if (c == null) continue;
+                DrawShape(new NativeRoomDiagnostics.Shape {
+                    type = (uint)c.ResolvedMode - 1,
+                    center = c.WorldCenter, halfExtents = c.WorldSize * 0.5f,
+                    radius = c.Radius, height = c.Height
+                });
+            }
         }
 
         DrawPlayer();
     }
 
-    private void DrawShape(CppCollision c)
+    private void DrawShape(NativeRoomDiagnostics.Shape c)
     {
-        switch (c.ResolvedMode)
+        switch (c.type)
         {
-            case CppCollision.CollisionMode.Box:
+            case 0:
 
                 Gizmos.color = boxColor;
 
                 Gizmos.DrawWireCube(
-                    c.WorldCenter,
-                    c.WorldSize);
+                    c.center,
+                    (c.halfExtents * 2.0f));
 
                 if (drawFilled)
                 {
@@ -100,19 +111,19 @@ public sealed class CollisionDebug : MonoBehaviour
                     Gizmos.color = fill;
 
                     Gizmos.DrawCube(
-                        c.WorldCenter,
-                        c.WorldSize);
+                        c.center,
+                        (c.halfExtents * 2.0f));
                 }
 
                 break;
 
-            case CppCollision.CollisionMode.Sphere:
+            case 1:
 
                 Gizmos.color = sphereColor;
 
                 Gizmos.DrawWireSphere(
-                    c.WorldCenter,
-                    c.Radius);
+                    c.center,
+                    c.radius);
 
                 if (drawFilled)
                 {
@@ -121,13 +132,13 @@ public sealed class CollisionDebug : MonoBehaviour
                     Gizmos.color = fill;
 
                     Gizmos.DrawSphere(
-                        c.WorldCenter,
-                        c.Radius);
+                        c.center,
+                        c.radius);
                 }
 
                 break;
 
-            case CppCollision.CollisionMode.Capsule:
+            case 2:
 
                 Gizmos.color = capsuleColor;
 
@@ -139,50 +150,50 @@ public sealed class CollisionDebug : MonoBehaviour
                 float cylinderHeight =
                     Mathf.Max(
                         0.0f,
-                        c.Height -
-                        c.Radius * 2.0f);
+                        c.height -
+                        c.radius * 2.0f);
 
                 Vector3 top =
-                    c.WorldCenter +
+                    c.center +
                     Vector3.up *
                     (cylinderHeight * 0.5f);
 
                 Vector3 bottom =
-                    c.WorldCenter -
+                    c.center -
                     Vector3.up *
                     (cylinderHeight * 0.5f);
 
                 Gizmos.DrawWireSphere(
                     top,
-                    c.Radius);
+                    c.radius);
 
                 Gizmos.DrawWireSphere(
                     bottom,
-                    c.Radius);
+                    c.radius);
 
                 Gizmos.DrawLine(
-                    top + Vector3.right * c.Radius,
-                    bottom + Vector3.right * c.Radius);
+                    top + Vector3.right * c.radius,
+                    bottom + Vector3.right * c.radius);
 
                 Gizmos.DrawLine(
-                    top - Vector3.right * c.Radius,
-                    bottom - Vector3.right * c.Radius);
+                    top - Vector3.right * c.radius,
+                    bottom - Vector3.right * c.radius);
 
                 Gizmos.DrawLine(
-                    top + Vector3.forward * c.Radius,
-                    bottom + Vector3.forward * c.Radius);
+                    top + Vector3.forward * c.radius,
+                    bottom + Vector3.forward * c.radius);
 
                 Gizmos.DrawLine(
-                    top - Vector3.forward * c.Radius,
-                    bottom - Vector3.forward * c.Radius);
+                    top - Vector3.forward * c.radius,
+                    bottom - Vector3.forward * c.radius);
 
                 // The horizontal circle the solver actually uses.
                 DrawCircle(
                     new Vector3(
-                        c.WorldCenter.x,
+                        c.center.x,
                         0.0f,
-                        c.WorldCenter.z),
-                    c.Radius);
+                        c.center.z),
+                    c.radius);
 
                 break;
         }
@@ -190,10 +201,17 @@ public sealed class CollisionDebug : MonoBehaviour
 
     private void DrawPlayer()
     {
-        Vector3 p = new Vector3(
-            unity_game_get_player_x(),
-            unity_game_get_player_y(),
-            unity_game_get_player_z());
+        if (!Application.isPlaying || !NativeGameBridge.IsInitialized) return;
+
+        Vector3 p;
+        try
+        {
+            p = new Vector3(unity_game_get_player_x(), unity_game_get_player_y(), unity_game_get_player_z());
+            playerCollisionRadius = unity_game_get_player_radius();
+        }
+        catch (DllNotFoundException) { return; }
+        catch (EntryPointNotFoundException) { return; }
+        catch (BadImageFormatException) { return; }
 
         Gizmos.color = playerCircleColor;
 

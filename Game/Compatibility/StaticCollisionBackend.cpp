@@ -28,29 +28,20 @@ StaticCollisionBackend::StaticCollisionBackend()
       m_playerRadius(0.35f) {
 }
 
-void StaticCollisionBackend::configure(
+bool StaticCollisionBackend::configure(
     const CollisionShape* shapes,
     unsigned int shapeCount,
     float playerRadius) {
 
+    if (shapeCount > MaxStaticCollisionShapes ||
+        (shapes == nullptr && shapeCount != 0) ||
+        !std::isfinite(playerRadius) || playerRadius < 0.0f) {
+        return false;
+    }
     m_shapes = shapes;
-
-    m_shapeCount =
-        shapeCount;
-
-    if (m_shapeCount >
-        MaxStaticCollisionShapes) {
-
-        m_shapeCount =
-            MaxStaticCollisionShapes;
-    }
-
-    m_playerRadius =
-        playerRadius;
-
-    if (m_playerRadius < 0.0f) {
-        m_playerRadius = 0.0f;
-    }
+    m_shapeCount = shapeCount;
+    m_playerRadius = playerRadius;
+    return true;
 }
 
 DisplacementResult
@@ -121,22 +112,22 @@ StaticCollisionBackend::resolveMove(
             const float minZ = shape.center.z - ez;
             const float maxZ = shape.center.z + ez;
 
-            if (position.x <= minX + touch && position.x >= minX - touch &&
+            if (nrmCount < MaxNormals && position.x <= minX + touch && position.x >= minX - touch &&
                 position.z >= minZ - touch && position.z <= maxZ + touch) {
                 nrmX[nrmCount] = -1.0f; nrmZ[nrmCount] = 0.0f;
                 ++nrmCount; sumX -= 1.0f;
             }
-            if (position.x >= maxX - touch && position.x <= maxX + touch &&
+            if (nrmCount < MaxNormals && position.x >= maxX - touch && position.x <= maxX + touch &&
                 position.z >= minZ - touch && position.z <= maxZ + touch) {
                 nrmX[nrmCount] = 1.0f; nrmZ[nrmCount] = 0.0f;
                 ++nrmCount; sumX += 1.0f;
             }
-            if (position.z <= minZ + touch && position.z >= minZ - touch &&
+            if (nrmCount < MaxNormals && position.z <= minZ + touch && position.z >= minZ - touch &&
                 position.x >= minX - touch && position.x <= maxX + touch) {
                 nrmX[nrmCount] = 0.0f; nrmZ[nrmCount] = -1.0f;
                 ++nrmCount; sumZ -= 1.0f;
             }
-            if (position.z >= maxZ - touch && position.z <= maxZ + touch &&
+            if (nrmCount < MaxNormals && position.z >= maxZ - touch && position.z <= maxZ + touch &&
                 position.x >= minX - touch && position.x <= maxX + touch) {
                 nrmX[nrmCount] = 0.0f; nrmZ[nrmCount] = 1.0f;
                 ++nrmCount; sumZ += 1.0f;
@@ -269,6 +260,11 @@ float StaticCollisionBackend::resolveX(
     float desiredX,
     bool& blocked) const {
 
+    // Do not depenetrate an axis that this candidate does not request.
+    // Otherwise the alternate axis order can win by making a large sideways
+    // correction when the player is only barely inside a round obstacle.
+    if (desiredX == position.x) return desiredX;
+
     float resolvedX =
         desiredX;
 
@@ -334,6 +330,8 @@ float StaticCollisionBackend::resolveZ(
     const Vec3& position,
     float desiredZ,
     bool& blocked) const {
+
+    if (desiredZ == position.z) return desiredZ;
 
     float resolvedZ =
         desiredZ;

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEditor;
 using System.IO;
 using UnityEngine.UIElements;
@@ -54,6 +54,10 @@ sealed class ReadmeEditor : Editor
             {
                 FileUtil.DeleteFileOrDirectory(k_ReadmeSourceDirectory);
                 FileUtil.DeleteFileOrDirectory(k_ReadmeSourceDirectory + ".meta");
+                FileUtil.DeleteFileOrDirectory("Assets/Scripts/Tutorial");
+                FileUtil.DeleteFileOrDirectory("Assets/Scripts/Tutorial.meta");
+                FileUtil.DeleteFileOrDirectory("Assets/Scripts/Editor/ReadmeEditor.cs");
+                FileUtil.DeleteFileOrDirectory("Assets/Scripts/Editor/ReadmeEditor.cs.meta");
             }
             else
             {

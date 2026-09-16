@@ -4,7 +4,7 @@
 
 | Role | Responsibilities | Primary owned paths |
 | --- | --- | --- |
-| Lead / Architect | Overall architecture, integration, compatibility API, architectural conflicts, Dreamcast/Simulant viability, and architecture documentation. | `Docs/`; review of `Engine/Compatibility/` |
+| Lead / Architect | Overall architecture, integration, compatibility API, architectural conflicts, Dreamcast/Simulant viability, and architecture documentation. | `Docs/`; review of `Game/Compatibility/` |
 | Gameplay | Engine-neutral gameplay systems: player, movement, interactions, inventory, enemies, puzzles, doors, events, game state, and save/load. | `Game/Core/`, `Game/Gameplay/`, `Game/Data/` |
 | Unity | Unity development/runtime integration, Unity backend implementation when required, PC visualization/debugging, and editor tooling. | `Unity/` |
 | Simulant / Dreamcast | Simulant and KallistiOS integration, Dreamcast runtime constraints, and platform capability validation. | `Simulant/` |
@@ -14,7 +14,7 @@
 - `main` is the stable Lead/integration branch.
 - Specialists work in isolated Codex worktrees on focused branches. Preferred names are `codex/gameplay-*`, `codex/unity-*`, and `codex/simulant-*`; retain and report an automatically generated name if Codex creates a different one.
 - Specialists make focused, reviewable commits. The Lead reviews and integrates their work.
-- `Engine/Compatibility/` is shared architectural territory: Lead review is required before integration.
+- `Game/Compatibility/` is shared architectural territory: Lead review is required before integration.
 
 ## Working agreement
 
