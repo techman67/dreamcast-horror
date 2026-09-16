@@ -1,11 +1,13 @@
 #pragma once
+#include "AuthoredBindings.h"
 #include "IDisplacementBackend.h"
 #include "Types.h"
 
 extern "C" {
 
-// Initialise the Game with a displacement backend.
-void game_init(IDisplacementBackend* displacement);
+// Initialise the Game with authored bindings and a displacement backend.
+// GameState.playerPos is initialised from bindings.initialPlayerPose.position.
+void game_init(SliceBindings bindings, IDisplacementBackend* displacement);
 
 // Advance the Game by one frame.
 // input may be null, in which case the Game performs no work this frame.

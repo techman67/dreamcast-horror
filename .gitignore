@@ -1,0 +1,9 @@
+﻿# MSVC / C++ build artifacts
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.idb
+*.suo
+*.user
+*.vcxproj.user

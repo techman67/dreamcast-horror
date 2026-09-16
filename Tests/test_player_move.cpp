@@ -10,7 +10,9 @@ static bool nearlyEqual(float a, float b, float eps = 0.001f) {
 
 int main() {
     MockBackend backend;
-    game_init(&backend);
+    SliceBindings bindings{};
+bindings.initialPlayerPose.position = {0.0f, 0.0f, 0.0f};
+game_init(bindings, &backend);
 
     const InputFrame forward{ {0.0f, 1.0f}, false };
 

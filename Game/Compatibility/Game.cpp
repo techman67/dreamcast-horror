@@ -7,15 +7,23 @@ namespace {
     IDisplacementBackend* g_displacement = nullptr;
 }
 
-extern "C" void game_init(IDisplacementBackend* displacement) {
+extern "C" void game_init(
+    SliceBindings bindings,
+    IDisplacementBackend* displacement) {
+
     g_displacement = displacement;
     g_state = GameState{};
+    g_state.playerPos = bindings.initialPlayerPose.position;
 }
 
-extern "C" void game_step(const InputFrame* input, float deltaSeconds) {
+extern "C" void game_step(
+    const InputFrame* input,
+    float deltaSeconds) {
+
     if (input == nullptr || g_displacement == nullptr) {
         return;
     }
+
     playerUpdate(g_state, *g_displacement, *input, deltaSeconds);
 }
 
