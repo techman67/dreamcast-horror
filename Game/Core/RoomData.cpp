@@ -36,12 +36,18 @@ const char* parseRoomData(const char* text, RoomData& output) {
     auto& bindings = room.bindings;
     auto& transition = bindings.cameraTransition;
     int version = 0;
-    if (!keyword(input, "dreamcast_room") || !(input >> version) || (version != 1 && version != 2))
-        return "Unsupported room format; expected dreamcast_room 1 or 2.";
+    if (!keyword(input, "dreamcast_room") || !(input >> version) || (version < 1 || version > 3))
+        return "Unsupported room format; expected dreamcast_room 1, 2 or 3.";
     if (!keyword(input, "player") || !(input >> bindings.playerActor.id) ||
         bindings.playerActor.id == 0 || !pose(input, bindings.initialPlayerPose) ||
         !scalar(input, bindings.playerCollisionRadius) || bindings.playerCollisionRadius <= 0)
         return "Invalid player binding, pose or collision radius.";
+    if (version == 3 && (!keyword(input, "character") ||
+        !scalar(input, bindings.playerHeight) || bindings.playerHeight < 0.5f || bindings.playerHeight > 4 ||
+        !scalar(input, bindings.playerStepHeight) || bindings.playerStepHeight < 0 ||
+        bindings.playerStepHeight > 0.5f || bindings.playerStepHeight >= bindings.playerHeight ||
+        bindings.playerCollisionRadius > 1))
+        return "Character requires height 0.5-4 m, radius up to 1 m, and step height 0-0.5 m below standing height.";
     if (!keyword(input, "camera") || !(input >> transition.cameraA.id) ||
         transition.cameraA.id != 1 || !pose(input, transition.poseA) ||
         !keyword(input, "camera") || !(input >> transition.cameraB.id) ||
@@ -78,7 +84,26 @@ const char* parseRoomData(const char* text, RoomData& output) {
             return "Unknown collision shape type.";
         }
     }
-    if (version == 2) {
+    if (version == 3) {
+        const auto p = bindings.initialPlayerPose.position;
+        for (float value : {p.x,p.y,p.z}) if (std::fabs(value)>10000)
+            return "Character spawn exceeds the 10000 m coordinate limit.";
+        for (unsigned i=0;i<room.shapeCount;++i) {
+            const auto& box=room.shapes[i];
+            if (box.type != CollisionShapeType::Box) return "3D character collision currently supports boxes only; replace sphere/capsule collision with a box.";
+            for (float value : {box.center.x,box.center.y,box.center.z,box.halfExtents.x,box.halfExtents.y,box.halfExtents.z})
+                if (std::fabs(value)>10000) return "3D collision exceeds the 10000 m coordinate/extent limit.";
+            const float radius=bindings.playerCollisionRadius, skin=0.0001f;
+            if (p.x>box.center.x-box.halfExtents.x-radius+skin && p.x<box.center.x+box.halfExtents.x+radius-skin &&
+                p.z>box.center.z-box.halfExtents.z-radius+skin && p.z<box.center.z+box.halfExtents.z+radius-skin &&
+                p.y>box.center.y-box.halfExtents.y-bindings.playerHeight+skin && p.y<box.center.y+box.halfExtents.y-skin)
+                return "Character spawn overlaps a solid box; move the player's feet above the floor and clear its standing volume.";
+        }
+    }
+    int hasObjective = version == 2 ? 1 : 0;
+    if (version == 3 && (!keyword(input, "objective") || !(input >> hasObjective) || (hasObjective != 0 && hasObjective != 1)))
+        return "Expected objective 0 or 1.";
+    if (hasObjective) {
         auto& objective = bindings.keyDoor;
         if (!keyword(input, "key") || !(input >> objective.keyActor.id) ||
             objective.keyActor.id == 0 || objective.keyActor.id == bindings.playerActor.id ||

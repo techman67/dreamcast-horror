@@ -97,5 +97,9 @@ struct SliceBindings {
     CameraTransition cameraTransition;
 
     float playerCollisionRadius = 0.35f;
+    // Zero keeps the v1/v2 flat controller. V3 uses feet position and an
+    // upright box of width/depth 2*radius with this standing height.
+    float playerHeight = 0.0f;
+    float playerStepHeight = 0.3f;
     KeyDoorBindings keyDoor;
 };

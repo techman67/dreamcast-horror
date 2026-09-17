@@ -16,7 +16,7 @@ static std::string replace(std::string text, const std::string& from, const std:
 }
 
 int main() {
-    std::ifstream file("Unity/Dreamcast-Horror/Assets/StreamingAssets/sample.room");
+    std::ifstream file("Tests/Fixtures/sample-v2.room");
     assert(file.is_open());
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     RoomData room{};
@@ -78,5 +78,14 @@ int main() {
     assert(parseRoomData((prefix + "shapes 1\ncapsule 0 0 0 1 1\nend").c_str(), room) != nullptr);
     assert(parseRoomData((prefix + "shapes 1\nsphere nan 0 0 1\nend").c_str(), room) != nullptr);
     assert(parseRoomData((prefix + "shapes 0\nend").c_str(), room) == nullptr);
+    const std::string v3="dreamcast_room 3\nplayer 1 0 0 0 0 0 0 0.35\ncharacter 1.8 0.3\ncamera 1 0 6 -5 0 0 0\ncamera 2 0 6 5 0 0 0\ntransition 1 4 1\nshapes 1\nbox 0 -0.1 0 10 0.1 10\nobjective 0\nend\n";
+    assert(parseRoomData(v3.c_str(),room)==nullptr && room.bindings.playerHeight==1.8f);
+    for (const auto& invalid : {replace(v3,"character 1.8 0.3","character 0.2 0.3"),
+        replace(v3,"character 1.8 0.3","character 1.8 0.6"),
+        replace(v3,"box 0 -0.1 0 10 0.1 10","sphere 0 -1 0 1"),
+        replace(v3,"box 0 -0.1 0","box 0 0 0"),
+        replace(v3,"objective 0","objective 2"), replace(v3,"box 0 -0.1 0","box 10001 -0.1 0")}) {
+        assert(parseRoomData(invalid.c_str(),room)!=nullptr && room.bindings.playerHeight==1.8f);
+    }
     std::puts("Shared room parsing, budget rejection and real room integration tests passed.");
 }

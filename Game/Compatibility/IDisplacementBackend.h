@@ -16,6 +16,8 @@
 struct DisplacementResult {
     Vec3 resolvedDelta;
     bool blocked = false;
+    bool grounded = false;
+    bool hitCeiling = false;
 };
 
 class IDisplacementBackend {

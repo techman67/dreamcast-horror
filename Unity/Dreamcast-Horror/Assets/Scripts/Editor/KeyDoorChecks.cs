@@ -120,6 +120,12 @@ public static class KeyDoorChecks
             InputSystem.QueueStateEvent(controller, new GamepadState());
             InputSystem.Update();
             Check(UnityPlayerInput.Read().move == Vector2.zero, "Released controls continued moving.");
+            InputSystem.QueueStateEvent(controller, new GamepadState(GamepadButton.East));
+            InputSystem.Update();
+            Check(UnityPlayerInput.Read().jumpPressed, "Controller east-button jump edge failed.");
+            InputSystem.QueueStateEvent(controller, new GamepadState(GamepadButton.East));
+            InputSystem.Update();
+            Check(!UnityPlayerInput.Read().jumpPressed, "Holding controller jump repeated the edge.");
         }
         finally { InputSystem.RemoveDevice(keyboard); InputSystem.RemoveDevice(controller); }
     }

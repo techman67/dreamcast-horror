@@ -17,6 +17,7 @@ public:
                         float(key(smlt::KEYBOARD_CODE_A) || key(smlt::KEYBOARD_CODE_LEFT));
         result.move.y = float(key(smlt::KEYBOARD_CODE_W) || key(smlt::KEYBOARD_CODE_UP)) -
                         float(key(smlt::KEYBOARD_CODE_S) || key(smlt::KEYBOARD_CODE_DOWN));
+        bool jump = key(smlt::KEYBOARD_CODE_SPACE);
         bool interact = key(smlt::KEYBOARD_CODE_E);
         bool restart = key(smlt::KEYBOARD_CODE_R);
         for (std::size_t i = 0; i < state.game_controller_count(); ++i) {
@@ -36,9 +37,12 @@ public:
                     result.move.x * result.move.x + result.move.y * result.move.y) result.move = candidate;
             };
             useStronger(stick); useStronger(pad);
+            jump |= controller->button_state(smlt::JOYSTICK_BUTTON_B);
             interact |= controller->button_state(smlt::JOYSTICK_BUTTON_A);
             restart |= controller->button_state(smlt::JOYSTICK_BUTTON_START);
         }
+        result.jumpPressed = jump && !wasJump_;
+        wasJump_ = jump;
         result.interactPressed = interact && !wasInteract_;
         restartPressed = restart && !wasRestart_;
         quitPressed = key(smlt::KEYBOARD_CODE_ESCAPE);
@@ -47,5 +51,5 @@ public:
     }
     bool restartPressed = false, quitPressed = false;
 private:
-    bool wasInteract_ = false, wasRestart_ = false;
+    bool wasInteract_ = false, wasRestart_ = false, wasJump_ = false;
 };

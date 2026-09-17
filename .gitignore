@@ -52,3 +52,7 @@ deepseek_powershell_*.ps1
 
 # All numbered source backups (including .bak9b)
 *.bak*
+
+# Python regression-test caches
+__pycache__/
+*.py[cod]

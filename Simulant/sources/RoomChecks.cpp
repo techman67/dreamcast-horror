@@ -21,6 +21,11 @@ void inputChecks(smlt::Window* window) {
     state._handle_key_down(smlt::KeyboardID(0), smlt::KEYBOARD_CODE_UP);
     require(adapter.read(state).move.y == 1);
     state._handle_key_up(smlt::KeyboardID(0), smlt::KEYBOARD_CODE_UP);
+    state._handle_key_down(smlt::KeyboardID(0), smlt::KEYBOARD_CODE_SPACE);
+    require(adapter.read(state).jumpPressed);
+    require(!adapter.read(state).jumpPressed);
+    state._handle_key_up(smlt::KeyboardID(0), smlt::KEYBOARD_CODE_SPACE);
+    require(!adapter.read(state).jumpPressed);
     smlt::GameControllerInfo info{};
     info.id = smlt::GameControllerID(7); // ID is deliberately different from index.
     info.button_count = smlt::JOYSTICK_BUTTON_MAX;
@@ -42,6 +47,11 @@ void inputChecks(smlt::Window* window) {
     require(!adapter.read(state).interactPressed);
     state._handle_joystick_button_up(info.id, smlt::JOYSTICK_BUTTON_A);
     require(!adapter.read(state).interactPressed);
+    state._handle_joystick_button_down(info.id, smlt::JOYSTICK_BUTTON_B);
+    require(adapter.read(state).jumpPressed);
+    require(!adapter.read(state).jumpPressed);
+    state._handle_joystick_button_up(info.id, smlt::JOYSTICK_BUTTON_B);
+    require(!adapter.read(state).jumpPressed);
     state._handle_joystick_button_down(info.id, smlt::JOYSTICK_BUTTON_START);
     adapter.read(state); require(adapter.restartPressed);
     adapter.read(state); require(!adapter.restartPressed);
@@ -59,13 +69,13 @@ void RoomScene::checkStep() {
     };
     require(++totalFrames_ < 4000, "Room playthrough timed out.");
     if (totalFrames_ == 1) {
-        require(key_ && door_, "Playback check requires the version 2 sample objective.");
+        require(room_.bindings.playerHeight > 0 || (key_ && door_), "Playback check requires the objective or stairs test room.");
         inputChecks(window);
     }
     auto& state = *input->state;
     const auto keyboard = smlt::KeyboardID(0);
     for (auto code : {smlt::KEYBOARD_CODE_W, smlt::KEYBOARD_CODE_A, smlt::KEYBOARD_CODE_S,
-                      smlt::KEYBOARD_CODE_D, smlt::KEYBOARD_CODE_E, smlt::KEYBOARD_CODE_R})
+                      smlt::KEYBOARD_CODE_D, smlt::KEYBOARD_CODE_E, smlt::KEYBOARD_CODE_R, smlt::KEYBOARD_CODE_SPACE})
         state._handle_key_up(keyboard, code);
     auto press = [&](smlt::KeyboardCode code) { state._handle_key_down(keyboard, code); };
     auto next = [&]() {
@@ -80,6 +90,35 @@ void RoomScene::checkStep() {
         else press(xAxis ? (delta > 0 ? smlt::KEYBOARD_CODE_D : smlt::KEYBOARD_CODE_A)
                          : (delta > 0 ? smlt::KEYBOARD_CODE_W : smlt::KEYBOARD_CODE_S));
     };
+    if (room_.bindings.playerHeight > 0) {
+        const Vec3 p=game_get_player_pos();
+        switch(checkStage_) {
+        case 0: if(++checkFrames_>30) next(); break;
+        case 1: walk(4,false); break;
+        case 2: require(std::fabs(p.y-1.5f)<.002f,"Stair ascent failed in Simulant."); next(); break;
+        case 3: walk(-1,false); break;
+        case 4: require(std::fabs(p.y)<.002f,"Stair descent failed in Simulant."); next(); break;
+        case 5: walk(4,false); break;
+        case 6: walk(-2,true); break;
+        case 7: if(++checkFrames_>60) next(); break;
+        case 8: require(std::fabs(p.y)<.002f,"Landing fall failed in Simulant.");
+            press(smlt::KEYBOARD_CODE_R); next(); break;
+        case 9:
+            require(std::fabs(p.y)<.002f && std::fabs(p.z+1)<.002f && std::fabs(p.x)<.002f,"Physics reset failed.");
+            require(audio_.played[0]>0,"Stairs did not emit footsteps.");
+            std::puts("SIMULANT STAIRS CHECKS PASSED: ascent, descent, landing fall, footsteps and reset.");
+            next(); break;
+        case 10: walk(3.5f,false); break;
+        case 11: walk(.85f,true); break;
+        case 12: press(smlt::KEYBOARD_CODE_D); press(smlt::KEYBOARD_CODE_SPACE); next(); break;
+        case 13: walk(1.85f,true); break;
+        case 14:
+            require(std::fabs(p.y-1.8f)<.01f,"Gap jump did not land on raised platform.");
+            std::puts("SIMULANT GAP JUMP CHECKS PASSED");
+            std::fflush(stdout); app->stop_running(); break;
+        }
+        return;
+    }
     const KeyDoorView view = game_get_key_door_view();
     switch (checkStage_) {
     case 0: if (++checkFrames_ > 30) next(); break;

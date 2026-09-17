@@ -14,6 +14,9 @@ struct GameState {
 
     Vec3 playerPos;
     Vec3 previousPlayerPos;
+    float playerHeight = 0;
+    float verticalSpeed = 0;
+    bool grounded = false;
 
     CameraRef gameplayCamera;
     Pose cameraPose;

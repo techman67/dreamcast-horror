@@ -1,16 +1,9 @@
 dreamcast_audio 2
-clips 6
-clip 0 9260 11a005df5e5757855926c9ca9f843dcf.wav
-clip 1 88200 398f3a58af87ff11ca82d783ef2179c1.wav
-clip 2 131068 78b7cea86afff74ff8cb4c029be10fbd.wav
-clip 3 5292 7ce6a9b784ab31872fb6f72c0fd06d1f.wav
-clip 4 14332 a461a31c3e1b0cb7bd528497ebbbd6f3.wav
-clip 5 10584 da9d6df88aa9a091d454a241b16d58ae.wav
-cue 0 3 1
-cue 1 5 1
-cue 2 0 1
-cue 3 4 1
-sources 2
-source 2 1 1 0.324 1.33 4.73 2 0
-source 1 1 1 0 0 0 0 0
+clips 1
+clip 0 5292 7ce6a9b784ab31872fb6f72c0fd06d1f.wav
+cue 0 0 1
+cue 1 -1 1
+cue 2 -1 1
+cue 3 -1 1
+sources 0
 end

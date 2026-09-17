@@ -94,7 +94,7 @@ smlt::Actor* RoomScene::shape(const CollisionShape& data, const smlt::MaterialPt
 void RoomScene::on_load() {
     const std::string text = roomText();
     if (const char* error = parseRoomData(text.c_str(), room_)) throw std::runtime_error(error);
-    require(collision_.configure(room_.shapes, room_.shapeCount, room_.bindings.playerCollisionRadius),
+    require(collision_.configure(room_.shapes, room_.shapeCount, room_.bindings.playerCollisionRadius, room_.bindings.playerHeight, room_.bindings.playerStepHeight),
             "Invalid room collision configuration.");
     if (room_.bindings.keyDoor.doorActor.id)
         require(collision_.configureDoor(room_.bindings.keyDoor.doorActor, room_.bindings.keyDoor.doorShapeIndex),
@@ -145,11 +145,11 @@ void RoomScene::on_load() {
     CollisionShape floor{};
     floor.center = {(minX + maxX) * 0.5f, room_.bindings.initialPlayerPose.position.y - 0.1f, (minZ + maxZ) * 0.5f};
     floor.halfExtents = {(maxX - minX) * 0.5f, 0.1f, (maxZ - minZ) * 0.5f};
-    if (!staticRoomExported) shape(floor, floorMaterial);
+    if (!staticRoomExported && room_.bindings.playerHeight == 0) shape(floor, floorMaterial);
     CollisionShape player{};
     player.type = CollisionShapeType::Capsule;
     player.radius = room_.bindings.playerCollisionRadius;
-    player.height = 1.8f;
+    player.height = room_.bindings.playerHeight > 0 ? room_.bindings.playerHeight : 1.8f;
     player_ = shape(player, blue);
     auto ui = create_child<smlt::Stage>();
     require(ui != nullptr, "Simulant could not create the HUD stage.");
@@ -209,7 +209,7 @@ void RoomScene::reset() {
 }
 
 void RoomScene::present() {
-    Vec3 p = game_get_player_pos(); p.y += 0.9f;
+    Vec3 p = game_get_player_pos(); p.y += room_.bindings.playerHeight > 0 ? room_.bindings.playerHeight * 0.5f : 0.9f;
     player_->transform->set_position(position(p));
     const unsigned id = game_get_camera_ref().id;
     if (id != cameraId_) {
@@ -233,7 +233,8 @@ void RoomScene::present() {
         if (view.flags & ObjectiveEnabled) {
             text += (view.flags & HasKey) ? "Inventory: brass key\n" : "Inventory: empty\n";
             text += prompt(view.prompt); text += "\n"; text += feedback(view.feedback);
-        } else text += "Exploring exported room (no key-door objective).";
+        } else if (room_.bindings.playerHeight > 0) text += "3D stairs test: W up, S down. Walk off landing to fall.\nWASD: move | Space / B: jump | R / Start: reset";
+        else text += "Exploring exported room (no key-door objective).";
         status_->set_text(text);
         lastView_ = view;
     }

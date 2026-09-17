@@ -6,17 +6,18 @@ bool enabled(const GameState& state) {
     return state.keyDoor.keyActor.id != 0 && state.keyDoor.doorActor.id != 0;
 }
 
-float distanceSquared(const Vec3& a, const Vec3& b) {
+float distanceSquared(const Vec3& a, const Vec3& b, float height) {
     const float dx = a.x - b.x, dz = a.z - b.z;
-    return dx * dx + dz * dz;
+    const float dy = height > 0 ? a.y + height * 0.5f - b.y : 0;
+    return dx * dx + dy * dy + dz * dz;
 }
 
 InteractionPrompt promptFor(const GameState& state) {
     if (!enabled(state)) return InteractionPrompt::None;
     if (state.completed) return InteractionPrompt::Complete;
     const auto& data = state.keyDoor;
-    const float keyDistance = distanceSquared(state.playerPos, data.keyPosition);
-    const float doorDistance = distanceSquared(state.playerPos, data.doorPosition);
+    const float keyDistance = distanceSquared(state.playerPos, data.keyPosition, state.playerHeight);
+    const float doorDistance = distanceSquared(state.playerPos, data.doorPosition, state.playerHeight);
     const bool nearDoor = doorDistance <= data.doorRange * data.doorRange;
     if (!state.hasKey && keyDistance <= data.keyRange * data.keyRange &&
         (!nearDoor || keyDistance <= doorDistance)) return InteractionPrompt::TakeKey;
@@ -38,6 +39,10 @@ bool crossedExit(const GameState& state) {
     const float t = (boundary - state.previousPlayerPos.z) /
                     (state.playerPos.z - state.previousPlayerPos.z);
     const float x = state.previousPlayerPos.x + t * (state.playerPos.x - state.previousPlayerPos.x);
+    if (state.playerHeight > 0) {
+        const float y=state.previousPlayerPos.y+t*(state.playerPos.y-state.previousPlayerPos.y)+state.playerHeight*0.5f;
+        if (std::fabs(y-state.keyDoor.doorPosition.y)>state.keyDoor.doorRange) return false;
+    }
     return std::fabs(x - state.keyDoor.exitCenterX) <= state.keyDoor.exitHalfWidthX;
 }
 }

@@ -10,16 +10,28 @@ $repositoryPath = Split-Path $PSScriptRoot -Parent
 $projectPath = Join-Path $repositoryPath 'Unity/Dreamcast-Horror'
 $logDirectory = Join-Path $env:TEMP ('dreamcast-unity-checks-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $logDirectory | Out-Null
-foreach ($check in @('ArchitectureChecks', 'KeyDoorChecks', 'RoomAudioExportChecks',
-    'RoomAudioRangeChecks', 'DreamcastAudioTrimChecks', 'RoomPropExportChecks', 'RoomLightingChecks')) {
-    $logPath = Join-Path $logDirectory ($check + '.log')
-    $arguments = '-batchmode -nographics -projectPath "' + $projectPath + '" -executeMethod ' + $check + '.Run -logFile "' + $logPath + '"'
+# Legacy checks explicitly test SampleScene; preserve the user's current exported room.
+$exports = @{}
+foreach ($name in @('sample.room', 'sample.audio', 'sample.props')) {
+    $path = Join-Path $projectPath ('Assets/StreamingAssets/' + $name)
+    $exports[$path] = [IO.File]::ReadAllBytes($path)
+}
+try {
+foreach ($method in @('ArchitectureChecks.ExportSample', 'ArchitectureChecks.Run', 'KeyDoorChecks.Run',
+    'RoomAudioExportChecks.Run', 'RoomAudioRangeChecks.Run', 'DreamcastAudioTrimChecks.Run',
+    'RoomPropExportChecks.Run', 'RoomLightingChecks.Run', 'RoomPhysicsSetup.BuildAndCheck',
+    'RoomPhysicsInputChecks.Run')) {
+    $logPath = Join-Path $logDirectory ($method + '.log')
+    $arguments = '-batchmode -nographics -projectPath "' + $projectPath + '" -executeMethod ' + $method + ' -logFile "' + $logPath + '"'
     $testProcess = Start-Process -FilePath $UnityEditor -ArgumentList $arguments -WindowStyle Hidden -PassThru
     if (-not $testProcess.WaitForExit(180000)) {
         Stop-Process -Id $testProcess.Id
-        throw "Unity check timed out: $check. Log: $logPath"
+        throw "Unity check timed out: $method. Log: $logPath"
     }
-    if ($testProcess.ExitCode -ne 0) { throw "Unity check failed: $check. Log: $logPath" }
-    Write-Output "$check passed. Log: $logPath"
+    if ($testProcess.ExitCode -ne 0) { throw "Unity check failed: $method. Log: $logPath" }
+    Write-Output "$method passed. Log: $logPath"
+}
+} finally {
+    foreach ($path in $exports.Keys) { [IO.File]::WriteAllBytes($path, $exports[$path]) }
 }
 Write-Output "All Unity checks passed. Logs: $logDirectory"

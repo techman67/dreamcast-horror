@@ -45,9 +45,15 @@ public static class RoomExporter
             doorIndex = Array.IndexOf(shapes, objective.DoorCollision);
             if (doorIndex < 0) throw new InvalidDataException("The authored door collision must be active at export.");
         }
+        var controllers = UnityEngine.Object.FindObjectsByType<DreamcastCharacterPhysics>()
+            .Where(c => c.isActiveAndEnabled).ToArray();
+        if (controllers.Length > 1 || (controllers.Length == 1 && controllers[0].gameObject != player.gameObject))
+            throw new InvalidDataException("Place exactly one Dreamcast Character Physics component on the exported player.");
+        var character = controllers.FirstOrDefault();
         var text = new StringBuilder();
-        text.AppendLine(objective == null ? "dreamcast_room 1" : "dreamcast_room 2");
+        text.AppendLine(character != null ? "dreamcast_room 3" : objective == null ? "dreamcast_room 1" : "dreamcast_room 2");
         text.AppendLine($"player 1 {Pose(player.transform, player.AuthoredSpawnPosition)} {Number(bridge.AuthoredPlayerRadius)}");
+        if (character != null) text.AppendLine($"character {Number(character.height)} {Number(character.stepHeight)}");
         text.AppendLine($"camera 1 {Pose(cameraA.transform, cameraA.transform.position)}");
         text.AppendLine($"camera 2 {Pose(cameraB.transform, cameraB.transform.position)}");
         text.AppendLine($"transition {Number(zone.transform.position.z)} {Number(Mathf.Abs(zone.transform.lossyScale.x) * 0.5f)} {bridge.AuthoredInitialCamera}");
@@ -55,6 +61,10 @@ public static class RoomExporter
         foreach (CppCollision shape in shapes)
         {
             shape.Recalculate();
+            if (character != null && shape.ResolvedMode != CppCollision.CollisionMode.Box)
+                throw new InvalidDataException($"3D character collision requires boxes: '{shape.name}' uses {shape.ResolvedMode}. Set its Cpp Collision mode to Box or Manual Box.");
+            if (character != null && Quaternion.Angle(shape.transform.rotation, Quaternion.identity) > .001f)
+                throw new InvalidDataException($"3D collision box '{shape.name}' is rotated. Use a separate axis-aligned collision proxy; ramps and rotated boxes are not supported yet.");
             switch (shape.ResolvedMode)
             {
                 case CppCollision.CollisionMode.Box:
@@ -70,6 +80,7 @@ public static class RoomExporter
                     throw new InvalidDataException($"Unsupported collision shape on {shape.name}.");
             }
         }
+        if (character != null) text.AppendLine(objective == null ? "objective 0" : "objective 1");
         if (objective != null)
         {
             text.AppendLine($"key {objective.KeyActorId} {Vector(objective.KeyVisual.position)} {Number(objective.KeyRange)}");

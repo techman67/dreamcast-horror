@@ -8,6 +8,7 @@ public static class UnityPlayerInput
     {
         public Vector2 move;
         public bool interactPressed;
+        public bool jumpPressed;
     }
 
     public static Sample Read()
@@ -21,6 +22,7 @@ public static class UnityPlayerInput
             if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) result.move.y -= 1;
             if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) result.move.y += 1;
             result.interactPressed = keyboard.eKey.wasPressedThisFrame;
+            result.jumpPressed = keyboard.spaceKey.wasPressedThisFrame;
         }
         Gamepad controller = Gamepad.current;
         if (controller != null)
@@ -30,6 +32,7 @@ public static class UnityPlayerInput
             Vector2 movement = dpad.sqrMagnitude > stick.sqrMagnitude ? dpad : stick;
             if (movement.sqrMagnitude > result.move.sqrMagnitude) result.move = movement;
             result.interactPressed |= controller.buttonSouth.wasPressedThisFrame;
+            result.jumpPressed |= controller.buttonEast.wasPressedThisFrame;
         }
         return result;
     }

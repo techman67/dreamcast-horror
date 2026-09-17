@@ -18,11 +18,11 @@ public sealed class NativeGameBridge :
         CallingConvention =
             CallingConvention.Cdecl)]
     private static extern void
-        unity_game_step(
+        unity_game_step_v2(
             float moveX,
             float moveY,
             float deltaSeconds,
-            int interactPressed);
+            int interactPressed, int jumpPressed);
 
     [DllImport(
         "dreamcast_horror",
@@ -65,6 +65,7 @@ public sealed class NativeGameBridge :
     private static extern IntPtr unity_game_get_error();
 
     public static bool IsInitialized { get; private set; }
+    public Vector2 LastMovementInput { get; private set; }
     public const string RoomFileName = "sample.room";
 
     [Header("Room export settings (runtime reads sample.room)")]
@@ -103,6 +104,7 @@ public sealed class NativeGameBridge :
         initialized = false;
         IsInitialized = false;
         LoadedShapes = null;
+        LastMovementInput = Vector2.zero;
         ResolveAuthoredCameras();
         if (gameplayCamera01 == null || gameplayCamera02 == null)
         {
@@ -166,7 +168,8 @@ public sealed class NativeGameBridge :
     {
         if (!IsInitialized) return;
         UnityPlayerInput.Sample input = UnityPlayerInput.Read();
-        unity_game_step(input.move.x, input.move.y, Time.deltaTime, input.interactPressed ? 1 : 0);
+        LastMovementInput = input.move;
+        unity_game_step_v2(input.move.x, input.move.y, Time.deltaTime, input.interactPressed ? 1 : 0, input.jumpPressed ? 1 : 0);
         audioPresentation.Consume();
         RefreshSlicePresentation();
 

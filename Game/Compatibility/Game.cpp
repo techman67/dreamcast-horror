@@ -126,6 +126,7 @@ extern "C" void game_init(
     g_state.cameraTransition =
         bindings.cameraTransition;
     g_state.keyDoor = bindings.keyDoor;
+    g_state.playerHeight = bindings.playerHeight;
     if (g_displacement != nullptr) initializeKeyDoor(g_state, *g_displacement);
 }
 
@@ -142,6 +143,7 @@ extern "C" void game_step(
         return;
     }
 
+    if (g_state.playerHeight > 0) deltaSeconds = std::fmin(deltaSeconds, 0.1f);
     g_state.previousPlayerPos =
         g_state.playerPos;
 
@@ -159,7 +161,8 @@ extern "C" void game_step(
         constexpr float stride = 0.65f;
         constexpr float minimumInterval = 0.25f;
         g_state.footstepCooldown = std::fmax(0.0f, g_state.footstepCooldown - deltaSeconds);
-        const bool walking = distance > 0.0001f && std::isfinite(distance);
+        const bool walking = distance > 0.0001f && std::isfinite(distance) &&
+            (g_state.playerHeight == 0 || g_state.grounded);
         if (walking) {
             // Only the first movement after reset gets an immediate step.
             // Preserve travel across stops so tapping cannot restart the stride.

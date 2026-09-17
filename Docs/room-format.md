@@ -1,4 +1,4 @@
-# Prototype room format, versions 1 and 2
+# Prototype room format, versions 1, 2 and 3
 
 The shared artifact is `Unity/Dreamcast-Horror/Assets/StreamingAssets/sample.room`.
 All hosts consume the same text. Whitespace separates tokens; decimal numbers
@@ -98,3 +98,17 @@ compatibility; **Check room audio** checks the aggregate configuration. See
 
 Static visuals are carried in the companion `sample.props` file and referenced
 `prop-textures/` files; they do not alter the collision format. See [static props](static-props.md).
+
+## Version 3: 3D character collision
+
+Version 3 adds `character <standing-height> <step-height>` immediately after
+`player`. Player XYZ is the feet position; radius defines the horizontal box
+half-width and half-depth. Height must be 0.5–4 m, radius >0–1 m, step height
+0–0.5 m and less than height. Only axis-aligned `box` shapes are accepted.
+All box centers/extents and spawn coordinates are limited to ±10,000 m;
+extents remain strictly positive. Spawns overlapping any closed solid fail.
+
+After shapes, `objective 0` goes directly to `end`; `objective 1` requires the
+same key/door/exit records as v2. Camera records are unchanged. Versions 1/2
+still use the flat controller and their original format. See
+[character physics](character-physics.md) for behavior and authoring limits.

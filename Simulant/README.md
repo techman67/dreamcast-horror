@@ -55,7 +55,7 @@ and Start to reset. Desktop E/R bindings only apply when a keyboard is exposed t
 the game; a Windows keyboard mapped to an emulated controller uses Flycast's mappings.
 This computer has `FlyCast/mappings/SDL_Keyboard.cfg` installed from
 `Simulant/config/SDL_Keyboard.cfg`: WASD maps to the stick, arrows to the D-pad,
-E to A, R to Start, and Tab opens the emulator menu. To install it on another
+E to A, Space to B (jump), R to Start, and Tab opens the emulator menu. To install it on another
 machine, close Flycast and copy the supplied mapping to its `mappings` directory;
 back up any existing keyboard mapping first. The launcher preserves user mappings.
 
@@ -157,3 +157,7 @@ Static props now load from `sample.props` and the referenced RGB565 textures.
 The AC export was visually checked in the Linux Simulant host and cross-compiled
 into the CDI. The package check verifies the finished disc contains exact geometry
 and texture filenames/sizes alongside its audio.
+
+Stairs rooms support **Space / controller B** to jump. The supplied Flycast
+keyboard mapping maps Space to Dreamcast B. Approach the landing edge before
+jumping across the right-hand gap; hold D during flight.

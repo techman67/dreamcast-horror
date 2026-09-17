@@ -95,7 +95,7 @@ int main() {
     assert(!(game_get_key_door_view().flags & SliceComplete)); // Outside exit width.
 
     // Complete the actual authored room using real collision and small frame steps.
-    std::ifstream file("Unity/Dreamcast-Horror/Assets/StreamingAssets/sample.room");
+    std::ifstream file("Tests/Fixtures/sample-v2.room");
     assert(file.is_open());
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     RoomData room{};

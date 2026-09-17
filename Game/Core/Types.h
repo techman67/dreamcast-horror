@@ -15,6 +15,7 @@ struct AudioEvents {
 struct InputFrame {
     Vec2  move;
     bool  interactPressed = false;
+    bool  jumpPressed = false;
 };
 
 enum class InteractionPrompt : unsigned int {

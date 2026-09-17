@@ -53,7 +53,7 @@ key-door integration coverage. Run `KeyDoorPlaythrough.Run` without `-nographics
 for an automated keyboard playthrough and camera images in the temporary directory
 reported in its log. These images exclude the on-screen text overlay.
 Version 1 room files still load without an objective;
-the current sample is version 2. See the room format document before editing by hand.
+the original key-door sample is version 2; the active stairs/jumping test export is version 3. See the room format document before editing by hand.
 
 ## Author audio and build a disc
 
@@ -83,3 +83,8 @@ cost or additional lighting textures. Cast shadows and moving-object lighting
 are not implemented in this pass.
 The static pass supports opaque props; animated characters and dynamic
 key/door model bindings remain future work.
+
+For stairs, gravity, jumping, collision limits and test controls, see
+[character physics](Docs/character-physics.md). Open **Dreamcast > Open stairs test room**
+in Unity; Space / controller B jumps. Export the scene you want before playing
+or rebuilding the CDI, since the scenes share one export destination.

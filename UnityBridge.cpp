@@ -40,7 +40,7 @@ int unity_game_init(const char* roomText) {
         g_error = parseRoomData(roomText, g_room);
         if (g_error != nullptr) return 0;
         if (!g_collisionBackend.configure(g_room.shapes, g_room.shapeCount,
-                                          g_room.bindings.playerCollisionRadius)) {
+                                          g_room.bindings.playerCollisionRadius, g_room.bindings.playerHeight, g_room.bindings.playerStepHeight)) {
             g_error = "Invalid static collision configuration.";
             return 0;
         }
@@ -116,4 +116,11 @@ void unity_game_get_key_door_bindings(KeyDoorBindings* bindings) {
 extern "C" __declspec(dllexport)
 void unity_game_get_key_door_view(KeyDoorView* view) {
     if (view != nullptr) *view = game_get_key_door_view();
+}
+
+// Keep the original entry point for existing tools; gameplay uses the expanded intent.
+extern "C" __declspec(dllexport)
+void unity_game_step_v2(float moveX, float moveY, float deltaSeconds, int interactPressed, int jumpPressed) {
+    const InputFrame input{{moveX, moveY}, interactPressed != 0, jumpPressed != 0};
+    game_step(&input, deltaSeconds);
 }

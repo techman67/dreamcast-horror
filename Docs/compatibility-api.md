@@ -55,8 +55,8 @@ The Unity presentation applies C++ snapshots: hide the collected key, hide the
 open door slab, and map prompt/feedback identifiers to text. Runtime key/door
 positions come from the exported data. Collision debug omits the open door too.
 No inventory UI framework, general interaction registry, animation graph or
-resource system was added. Interaction uses X/Z distance for the single flat
-room; line-of-sight tracing is deferred and must be added before authoring
+resource system was added. V1/v2 interaction uses X/Z distance for the flat
+room; v3 includes vertical distance from the character center. Line-of-sight tracing is deferred and must be added before authoring
 interactables across separating walls.
 
 ## Shared authored room data
@@ -160,3 +160,16 @@ both hosts consume this manifest. Shared C++ parses/validates it, while host cod
 owns file loading, playback and distance attenuation. Static AICA samples/channels
 are a Dreamcast backend detail, not a requirement on gameplay code. See
 [audio format](audio-format.md).
+
+## 3D character movement (room v3)
+
+DisplacementResult now additionally reports `grounded` and `hitCeiling`.
+Defaults are false so existing flat backends remain compatible. StaticCollisionBackend
+accepts optional standing height and step height at configuration; height zero
+selects the legacy implementation. Player gravity belongs to shared gameplay;
+static sweeps and auto-stepping belong to the displacement backend. No additional
+engine service or engine dependency was introduced. See `character-physics.md`.
+
+`InputFrame.jumpPressed` is a jump-button edge. Unity uses `unity_game_step_v2`
+with a separate jump integer; the original entry point remains for existing tools.
+Keyboard Space and controller B/east map to jump; E/A still interact.

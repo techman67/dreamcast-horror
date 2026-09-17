@@ -1,6 +1,7 @@
 #include "StaticCollisionBackend.h"
 
 #include <cmath>
+#include <initializer_list>
 
 namespace {
 
@@ -31,16 +32,28 @@ StaticCollisionBackend::StaticCollisionBackend()
 bool StaticCollisionBackend::configure(
     const CollisionShape* shapes,
     unsigned int shapeCount,
-    float playerRadius) {
+    float playerRadius, float playerHeight, float stepHeight) {
 
     if (shapeCount > MaxStaticCollisionShapes ||
         (shapes == nullptr && shapeCount != 0) ||
-        !std::isfinite(playerRadius) || playerRadius < 0.0f) {
+        !std::isfinite(playerRadius) || playerRadius < 0.0f ||
+        !std::isfinite(playerHeight) || playerHeight < 0 || playerHeight > 4 ||
+        !std::isfinite(stepHeight) || stepHeight < 0 || stepHeight > 0.5f ||
+        (playerHeight > 0 && (playerHeight < 0.5f || playerRadius <= 0 || playerRadius > 1 || stepHeight >= playerHeight))) {
         return false;
+    }
+    if (playerHeight > 0) for (unsigned i = 0; i < shapeCount; ++i) {
+        const auto& s = shapes[i];
+        if (s.type != CollisionShapeType::Box) return false;
+        for (float value : {s.center.x,s.center.y,s.center.z,s.halfExtents.x,s.halfExtents.y,s.halfExtents.z})
+            if (!std::isfinite(value) || std::fabs(value) > 10000) return false;
+        if (s.halfExtents.x <= 0 || s.halfExtents.y <= 0 || s.halfExtents.z <= 0) return false;
     }
     m_shapes = shapes;
     m_shapeCount = shapeCount;
     m_playerRadius = playerRadius;
+    m_playerHeight = playerHeight;
+    m_stepHeight = stepHeight;
     m_doorActor = ActorRef{};
     m_doorShapeIndex = MaxStaticCollisionShapes;
     m_doorBlocked = true;
@@ -68,6 +81,8 @@ StaticCollisionBackend::resolveMove(
     const ActorRef&,
     const Vec3& position,
     const Vec3& desiredDelta) {
+
+    if (m_playerHeight > 0) return resolveMove3D(position, desiredDelta);
 
     if (m_shapes == nullptr || m_shapeCount == 0) {
         return { desiredDelta, false };
