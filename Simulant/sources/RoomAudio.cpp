@@ -1,4 +1,5 @@
 #include "RoomAudio.h"
+#include "RoomLoading.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -18,8 +19,7 @@
 namespace {
 std::uint64_t now() { return smlt::get_app()->time_keeper->now_in_us(); }
 std::string path(const std::string& relative) {
-    std::string p = "assets/" + relative;
-    return std::ifstream(p) ? p : "/cd/" + p;
+    return roomAsset(relative);
 }
 unsigned le(const unsigned char* p, unsigned n) {
     unsigned value = 0;

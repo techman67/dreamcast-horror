@@ -16,6 +16,8 @@ for file in "$source_dir"/sources/*.cpp "$source_dir"/sources/*.h; do
     dest="$project_dir/sources/$(basename "$file")"
     cmp -s "$file" "$dest" || cp "$file" "$dest"
 done
+mkdir -p "$project_dir/SharedHost"
+cp "$source_dir/../SharedHost/FileSaveStorage.h" "$project_dir/SharedHost/"
 for dir in Core Compatibility Gameplay; do
     mkdir -p "$project_dir/Game/$dir"
     for file in "$source_dir/../Game/$dir"/*.cpp "$source_dir/../Game/$dir"/*.h; do
@@ -51,7 +53,7 @@ case "${1:-run}" in
                 -v "$project_dir:/project" \
                 kazade/dreamcast-sdk@sha256:7202a5d5d007bcb7802c48f1bf30b22d03e337927543b5396130f8420c6f37ec \
                 mkdcdisc -e /project/build/dreamcast-sh4-gcc/release/setup-check.elf \
-                -d /project/assets -n "Dreamcast Horror Sample" \
+                -d /project/assets -n "Dreamcast Horror Sample" -s IND-DCH001 \
                 -N --allow-overwrite -o /project/packages/dreamcast-horror.cdi
             python3 "$source_dir/scripts/check_disc_audio.py" "$project_dir/packages/dreamcast-horror.cdi" "$project_dir/assets/sample.audio"
             disc_dir="$source_dir/../FlyCast"

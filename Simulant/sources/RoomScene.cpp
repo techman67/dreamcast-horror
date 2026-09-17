@@ -1,6 +1,8 @@
 #include "RoomScene.h"
+#include "RoomLoading.h"
 #include "Game.h"
 #include "RoomProps.h"
+#include "RoomSaveStorage.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -19,8 +21,8 @@ smlt::Vec3 position(Vec3 p) { return smlt::Vec3(p.x, p.y, -p.z); }
 
 std::string roomText() {
     const char* overridePath = std::getenv("DREAMCAST_ROOM_FILE");
-    std::ifstream stream(overridePath ? overridePath : "assets/sample.room", std::ios::binary);
-    if (!stream && !overridePath) stream = std::ifstream("/cd/assets/sample.room", std::ios::binary);
+    std::ifstream stream(overridePath ? overridePath : roomAsset("sample.room"), std::ios::binary);
+
     if (!stream) throw std::runtime_error("sample.room is missing; export the room in Unity first.");
     std::string text;
     char buffer[1024];
@@ -91,13 +93,20 @@ smlt::Actor* RoomScene::shape(const CollisionShape& data, const smlt::MaterialPt
     return actor;
 }
 
+RoomScene::RoomScene(smlt::Window* w):smlt::Scene(w) { ++liveRoomScenes(); }
+RoomScene::~RoomScene() { --liveRoomScenes(); }
+
 void RoomScene::on_load() {
+    require(liveRoomScenes()==1,"Overlapping room scenes are forbidden.");
+    roomMemory("before room load");
     const std::string text = roomText();
     if (const char* error = parseRoomData(text.c_str(), room_)) throw std::runtime_error(error);
+    if(world_active()) require(saveHash(text.data(),text.size())==world_room()->hash,"Room content does not match world manifest.");
     require(collision_.configure(room_.shapes, room_.shapeCount, room_.bindings.playerCollisionRadius, room_.bindings.playerHeight, room_.bindings.playerStepHeight),
             "Invalid room collision configuration.");
     if (room_.bindings.keyDoor.doorActor.id)
-        require(collision_.configureDoor(room_.bindings.keyDoor.doorActor, room_.bindings.keyDoor.doorShapeIndex),
+        if(world_active()) require(saveHash(text.data(),text.size())==world_room()->hash,"Room content does not match world manifest.");
+    require(collision_.configureDoor(room_.bindings.keyDoor.doorActor, room_.bindings.keyDoor.doorShapeIndex),
                 "Invalid exported door collision binding.");
     world_ = create_child<smlt::Stage>();
     require(world_ != nullptr, "Simulant could not create the world stage.");
@@ -123,7 +132,7 @@ void RoomScene::on_load() {
     const auto floorMaterial = material(smlt::Color(0.22f, 0.25f, 0.28f, 1));
     float minX = room_.bindings.initialPlayerPose.position.x - 1, maxX = minX + 2;
     float minZ = room_.bindings.initialPlayerPose.position.z - 1, maxZ = minZ + 2;
-    const bool staticRoomExported = loadRoomProps(*assets, *world_);
+    const bool staticRoomExported = props_.load(*assets, *world_);
     for (unsigned i = 0; i < room_.shapeCount; ++i) {
         const auto& data = room_.shapes[i];
         const bool door = room_.bindings.keyDoor.doorActor.id && i == room_.bindings.keyDoor.doorShapeIndex;
@@ -180,6 +189,7 @@ void RoomScene::on_load() {
         const char* filename = nullptr;
         if (snapshot && ++frames == 30) filename = "room-snapshot.ppm";
         if (checkStage_ == 0 && checkFrames_ == 10) filename = "room-check-start.ppm";
+        if (props_.effectVertexCount() && checkStage_ == 0 && checkFrames_ == 25) filename = "room-effect-late.ppm";
         if (checkStage_ == 11 && checkFrames_ == 5) filename = "room-check-key.ppm";
         if (checkStage_ == 17) filename = "room-check-exit.ppm";
         if (!filename) return;
@@ -194,16 +204,43 @@ void RoomScene::on_load() {
         if (snapshot) app->stop_running();
     });
 #endif
+    saveStatus_=ui->create_child<smlt::ui::Label>("L / Y: load latest save");
+    require(saveStatus_!=nullptr,"Unable to create save status.");
+    saveStatus_->set_anchor_point(0,0); saveStatus_->transform->set_position_2d(smlt::Vec2(12,12));
+    saveStatus_->set_text_color(smlt::Color::white()); saveStatus_->set_background_color(smlt::Color(0.03f,0.03f,0.04f,.9f)); saveStatus_->set_padding(5);
+    auto sourceRoom=roomText(); savePoints_.room=saveHash(sourceRoom.data(),sourceRoom.size());
+    const char* overridePath=std::getenv("DREAMCAST_ROOM_FILE");
+    std::ifstream saveFile(overridePath ? std::string(overridePath)+".saves" : roomAsset("sample.saves"),std::ios::binary|std::ios::ate);
+
+    if(saveFile) {
+        auto size=saveFile.tellg(); require(size>=12 && size<=1100,"Invalid save-point manifest size.");
+        unsigned char bytes[1100]{}; saveFile.seekg(0); saveFile.read(reinterpret_cast<char*>(bytes),size);
+        require(bool(saveFile),"Unable to read save points."); SavePoints points;
+        if(const char* error=parseSavePoints(bytes,static_cast<std::size_t>(size),points)) throw std::runtime_error(error);
+        require(points.room==savePoints_.room,"Save points do not match room; export again."); savePoints_=points;
+    }
+    if(world_active()) {
+        auto fadeStage=create_child<smlt::Stage>();
+        auto fadeLayer=compositor->create_layer(fadeStage,uiCamera,10); fadeLayer->set_clear_flags(0); fadeLayer->activate();
+        fade_=fadeStage->create_child<smlt::ui::Label>(""); fade_->resize(smlt::ui::Px(640),smlt::ui::Px(480));
+        fade_->set_anchor_point(0,0); fade_->transform->set_position_2d(smlt::Vec2(0,0));
+        fadeAmount_=1; fade_->set_background_color(smlt::Color(0,0,0,1));
+    }
     audio_.load(this, world_);
     reset();
+    if(world_active()) { require(world_enter(),"Unable to enter room arrival or restore progress."); cameraId_=0; audio_.update(game_get_player_pos()); props_.reset(game_get_player_pos()); present(); }
+    roomMemory("room loaded");
     std::printf("SIMULANT ROOM: loaded %u exported shapes\n", room_.shapeCount);
     std::fflush(stdout);
 }
 
 void RoomScene::reset() {
     game_init(room_.bindings, &collision_);
+    game_set_save_points(&savePoints_);
+    saveMessage_.clear(); saveMessageSeconds_=0;
     audio_.update(game_get_player_pos());
     audio_.reset();
+    props_.reset(game_get_player_pos());
     cameraId_ = 0;
     present();
 }
@@ -243,19 +280,74 @@ void RoomScene::present() {
 void RoomScene::on_update(float dt) {
     smlt::Scene::on_update(dt);
 #ifndef __DREAMCAST__
+    const bool worldCheck=std::getenv("SIMULANT_WORLD_CHECK")!=nullptr;
+    if(worldCheck) dt=1.0f/60.0f;
+#endif
+#ifndef __DREAMCAST__
     if (checking_) checkStep();
 #endif
     const InputFrame frame = controls_.read(*input->state);
+    if(fade_) {
+        if(departing_) {
+            fadeAmount_=std::min(1.0f,fadeAmount_+std::max(dt,0.0f)/.25f);
+            fade_->set_background_color(smlt::Color(0,0,0,fadeAmount_));
+            if(fadeAmount_>=1) scenes->activate("loading");
+            return;
+        }
+        if(fadeAmount_>0) { fadeAmount_=std::max(0.0f,fadeAmount_-dt/.25f); fade_->set_background_color(smlt::Color(0,0,0,fadeAmount_)); return; }
+#ifndef __DREAMCAST__
+        if(worldCheck && ++totalFrames_==20) {
+            static unsigned trips=0;
+            if(trips==12) { std::puts("SIMULANT WORLD CHECK PASSED: 12 scene transitions; previous RoomScene destroyed before every destination allocation."); std::fflush(stdout); app->stop_running(); return; }
+            require(world_room()->linkCount>0,"World check needs a linked room.");
+            SaveProgress p; require(game_capture_progress(&p),"World check could not capture progress."); p.position=world_room()->links[0].position;
+            require(game_restore_progress(&p),"World check could not position player at link.");
+            require(world_depart(true),"World check could not activate link."); ++trips; departing_=true; return;
+        }
+#endif
+        if(world_depart(frame.interactPressed)) { departing_=true; return; }
+    }
     if (controls_.quitPressed) app->stop_running();
+    if (controls_.restartPressed && world_active()) { world_restart(); departing_=true; return; }
     if (controls_.restartPressed) reset();
     else game_step(&frame, checking_ ? 1.0f / 60.0f : std::min(dt, 0.1f));
+    if(controls_.loadPressed) saveAction(true);
+    else if(game_take_save_request()>=0) saveAction(false);
+    if(world_pending()) { departing_=true; return; }
+    saveMessageSeconds_=std::max(0.0f,saveMessageSeconds_-dt);
+    int near=game_near_save_point();
+    std::string saveText=saveMessageSeconds_>0 ? saveMessage_ : near>=0 ? std::string("E / A: ")+savePoints_.points[near].prompt : "";
+    if(world_near_link()>=0 && saveMessageSeconds_<=0) saveText="E / A: Enter room";
+    saveText+="\nL / Y: load latest save";
+    if(saveText!=lastSaveText_) { saveStatus_->set_text(saveText); lastSaveText_=saveText; }
     audio_.update(game_get_player_pos());
     audio_.consume(game_take_audio_events());
+    props_.update(checking_ ? 1.0f / 60.0f : dt, game_get_player_pos());
     present();
 }
 
 void RoomScene::on_unload() {
+    if (checking_ && props_.effectVertexCount()) {
+        if (props_.continuousEffect()) require(props_.effectUpdates() > 1, "Light effect did not animate during room playback.");
+        std::printf("SIMULANT LIGHT EFFECT CHECK PASSED: %u vertices, %u runtime color changes excluding resets.\n",props_.effectVertexCount(),props_.effectUpdates());
+    }
+    props_.clear();
     audio_.unload();
     captureConnection_.disconnect();
     game_init(SliceBindings{}, nullptr);
+}
+
+void RoomScene::saveAction(bool load) {
+    RoomSaveStorage storage; SaveProgress progress;
+    SaveResult result;
+    if(world_active()) result=load ? world_load(storage) : world_save(storage);
+    else if(load) {
+        result=readProgress(storage,savePoints_.room,progress);
+        if(result==SaveResult::Ok) {
+            if(!game_restore_progress(&progress)) result=SaveResult::Invalid;
+            else { cameraId_=0; audio_.reset(); props_.reset(game_get_player_pos()); }
+        }
+    } else result=game_capture_progress(&progress) ? writeProgress(storage,savePoints_.room,progress) : SaveResult::NotReady;
+    saveMessage_=load && result==SaveResult::Ok ? "Saved progress loaded." : saveResultText(result); saveMessageSeconds_=5;
+    std::printf("SAVE: %s\n",saveMessage_.c_str()); std::fflush(stdout);
 }

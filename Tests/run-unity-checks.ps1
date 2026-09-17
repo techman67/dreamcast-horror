@@ -12,15 +12,15 @@ $logDirectory = Join-Path $env:TEMP ('dreamcast-unity-checks-' + [guid]::NewGuid
 New-Item -ItemType Directory -Path $logDirectory | Out-Null
 # Legacy checks explicitly test SampleScene; preserve the user's current exported room.
 $exports = @{}
-foreach ($name in @('sample.room', 'sample.audio', 'sample.props')) {
+foreach ($name in @('sample.room', 'sample.audio', 'sample.props', 'sample.saves', 'sample.world')) {
     $path = Join-Path $projectPath ('Assets/StreamingAssets/' + $name)
-    $exports[$path] = [IO.File]::ReadAllBytes($path)
+    $exports[$path] = if(Test-Path -LiteralPath $path) { [IO.File]::ReadAllBytes($path) } else { $null }
 }
 try {
 foreach ($method in @('ArchitectureChecks.ExportSample', 'ArchitectureChecks.Run', 'KeyDoorChecks.Run',
     'RoomAudioExportChecks.Run', 'RoomAudioRangeChecks.Run', 'DreamcastAudioTrimChecks.Run',
-    'RoomPropExportChecks.Run', 'RoomLightingChecks.Run', 'RoomPhysicsSetup.BuildAndCheck',
-    'RoomPhysicsInputChecks.Run')) {
+    'RoomPropExportChecks.Run', 'RoomLightingChecks.Run', 'RoomShadowChecks.Run', 'RoomExtendedLightingChecks.Run', 'RoomLightEffectChecks.Run', 'RoomContactChecks.Run', 'RoomSaveChecks.Run', 'DreamcastExportPreview.CheckDemo', 'RoomPhysicsSetup.BuildAndCheck',
+    'RoomPhysicsInputChecks.Run', 'RoomLightEffectChecks.RunPreview', 'RoomSavePlayChecks.Run')) {
     $logPath = Join-Path $logDirectory ($method + '.log')
     $arguments = '-batchmode -nographics -projectPath "' + $projectPath + '" -executeMethod ' + $method + ' -logFile "' + $logPath + '"'
     $testProcess = Start-Process -FilePath $UnityEditor -ArgumentList $arguments -WindowStyle Hidden -PassThru
@@ -32,6 +32,6 @@ foreach ($method in @('ArchitectureChecks.ExportSample', 'ArchitectureChecks.Run
     Write-Output "$method passed. Log: $logPath"
 }
 } finally {
-    foreach ($path in $exports.Keys) { [IO.File]::WriteAllBytes($path, $exports[$path]) }
+    foreach ($path in $exports.Keys) { if($null -ne $exports[$path]) { [IO.File]::WriteAllBytes($path, $exports[$path]) } elseif(Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path } }
 }
 Write-Output "All Unity checks passed. Logs: $logDirectory"

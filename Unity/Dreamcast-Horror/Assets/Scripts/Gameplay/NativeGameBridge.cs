@@ -87,6 +87,7 @@ public sealed class NativeGameBridge :
     private uint lastCameraId = 0;
     private bool initialized;
     private RoomAudio audioPresentation;
+    private RoomSavePresentation savePresentation;
     private KeyDoorPresentation slicePresentation;
     public static NativeKeyDoor.Bindings SliceBindings { get; private set; }
     public static NativeKeyDoor.View SliceView { get; private set; }
@@ -114,9 +115,12 @@ public sealed class NativeGameBridge :
 
         try
         {
-            string roomText = File.ReadAllText(Path.Combine(Application.streamingAssetsPath, RoomFileName));
+            string directory=RoomWorldPresentation.Prepare();
+            string roomText = File.ReadAllText(Path.Combine(directory, RoomFileName));
             if (unity_game_init(roomText) == 0)
                 throw new InvalidDataException(Marshal.PtrToStringAnsi(unity_game_get_error()));
+            savePresentation = new RoomSavePresentation(roomText,directory);
+            RoomWorldPresentation.Enter();
             LoadedShapes = NativeRoomDiagnostics.Snapshot();
             SliceBindings = NativeKeyDoor.ReadBindings();
             SliceView = NativeKeyDoor.ReadView();
@@ -130,7 +134,7 @@ public sealed class NativeGameBridge :
                 slicePresentation.Initialize(SliceBindings);
             }
             RefreshSlicePresentation();
-            audioPresentation = new RoomAudio(transform);
+            audioPresentation = new RoomAudio(transform,directory);
             initialized = true;
             IsInitialized = true;
         }
@@ -168,13 +172,18 @@ public sealed class NativeGameBridge :
     {
         if (!IsInitialized) return;
         UnityPlayerInput.Sample input = UnityPlayerInput.Read();
+        if(RoomWorldPresentation.Transition(input.interactPressed)) { LastMovementInput=Vector2.zero; return; }
         LastMovementInput = input.move;
         unity_game_step_v2(input.move.x, input.move.y, Time.deltaTime, input.interactPressed ? 1 : 0, input.jumpPressed ? 1 : 0);
+        if(savePresentation.Update()) { audioPresentation.Reset(); ApplyActiveCamera(true); }
+        if(RoomWorldPresentation.Transition(false)) return;
         audioPresentation.Consume();
         RefreshSlicePresentation();
 
         ApplyActiveCamera(false);
     }
+
+    private void OnGUI() { if(IsInitialized) savePresentation?.Draw(); }
 
     private void RefreshSlicePresentation()
     {

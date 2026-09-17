@@ -1,4 +1,5 @@
 #include "RoomProps.h"
+#include "RoomLoading.h"
 #include "PropData.h"
 #include <cstdio>
 #include <fstream>
@@ -7,8 +8,7 @@
 
 namespace {
 std::vector<unsigned char> read(const std::string& name, unsigned limit) {
-    std::ifstream stream("assets/" + name, std::ios::binary | std::ios::ate);
-    if (!stream) stream = std::ifstream("/cd/assets/" + name, std::ios::binary | std::ios::ate);
+    std::ifstream stream(roomAsset(name), std::ios::binary | std::ios::ate);
     if (!stream || stream.tellg() < 0 || stream.tellg() > std::streamoff(limit))
         throw std::runtime_error("Missing/oversized prop asset: " + name + ". Re-export the room.");
     std::vector<unsigned char> bytes(static_cast<std::size_t>(stream.tellg()));
@@ -18,7 +18,8 @@ std::vector<unsigned char> read(const std::string& name, unsigned limit) {
 }
 unsigned word(const unsigned char* p) { return unsigned(p[0]) | unsigned(p[1]) << 8 | unsigned(p[2]) << 16 | unsigned(p[3]) << 24; }
 }
-bool loadRoomProps(smlt::AssetManager& assets, smlt::Stage& stage) try {
+bool RoomProps::load(smlt::AssetManager& assets, smlt::Stage& stage) try {
+    clear();
     auto file = read("sample.props", MaxPropFileBytes);
     PropData props;
     if (const char* error = parsePropData(file.data(), file.size(), props)) throw std::runtime_error(error);
@@ -35,6 +36,8 @@ bool loadRoomProps(smlt::AssetManager& assets, smlt::Stage& stage) try {
         texture->set_data(bytes.data()+12, bytes.size()-12);
         textures.push_back(texture); textureBytes += t.width*t.height*2;
     }
+    unsigned offset = 0, changeIndex = 0;
+    effect_ = props.lightEffect;
     for (const auto& part : props.parts) {
         auto material = assets.clone_default_material();
         material->set_lighting_enabled(false);
@@ -57,10 +60,56 @@ bool loadRoomProps(smlt::AssetManager& assets, smlt::Stage& stage) try {
         }
         sub->index_data->done();
         if (!stage.create_child<smlt::Actor>(mesh)) throw std::runtime_error("Unable to create static prop actor.");
+        Part animated; animated.mesh = mesh;
+        unsigned changeEnd = changeIndex;
+        while (changeEnd < props.lightChanges.size() && props.lightChanges[changeEnd].vertex < offset + part.vertices.size()) ++changeEnd;
+        animated.vertices.reserve(changeEnd - changeIndex);
+        while (changeIndex < props.lightChanges.size() && props.lightChanges[changeIndex].vertex < offset + part.vertices.size()) {
+            const auto& change = props.lightChanges[changeIndex++];
+            const unsigned local = change.vertex - offset;
+            animated.vertices.push_back({local, part.vertices[local].color, change.onColor});
+        }
+        if (!animated.vertices.empty()) animated_.push_back(std::move(animated));
+        offset += static_cast<unsigned>(part.vertices.size());
         triangles += part.vertices.size()/3;
     }
     std::printf("PROPS: %u triangles, %u parts, %u RGB565 texture bytes\n",triangles,unsigned(props.parts.size()),textureBytes);
+    effectVertices_ = static_cast<unsigned>(props.lightChanges.size());
+    if (effectVertices_) std::printf("LIGHT EFFECT: %u / %u vertices, 20 Hz maximum color updates\n",effectVertices_,MaxLightEffectVertices);
     return props.includesStaticRoom;
 } catch (const std::exception& error) {
     std::printf("PROP LOAD FAILED: %s\n",error.what()); std::fflush(stdout); throw;
+}
+
+void RoomProps::apply(Vec3 listener) {
+    if (animated_.empty()) return;
+    const unsigned amount = static_cast<unsigned>(sampleLightEffect(effect_,phase_,listener)*255 + .5f);
+    if (amount == lastAmount_) return;
+    lastAmount_ = amount;
+    for (auto& part : animated_) {
+        for (const auto& vertex : part.vertices) {
+            const auto color = blendLightColor(vertex.off,vertex.on,amount);
+            part.mesh->vertex_data->move_to(static_cast<std::int32_t>(vertex.index));
+            part.mesh->vertex_data->color(static_cast<std::uint8_t>(color),static_cast<std::uint8_t>(color>>8),
+                static_cast<std::uint8_t>(color>>16),static_cast<std::uint8_t>(255));
+        }
+        part.mesh->vertex_data->done();
+    }
+}
+void RoomProps::update(float dt, Vec3 listener) {
+    if (animated_.empty() || !std::isfinite(dt) || dt <= 0) return;
+    dt = std::min(dt,.1f);
+    phase_ = advanceLightPhase(phase_,dt,effect_.frequency);
+    timer_ += dt;
+    if (timer_ < .05f) return;
+    timer_ = std::fmod(timer_,.05f);
+    const unsigned previous = lastAmount_;
+    apply(listener);
+    if (lastAmount_ != previous) ++updates_;
+}
+void RoomProps::reset(Vec3 listener) {
+    phase_ = timer_ = 0; lastAmount_ = 256; apply(listener);
+}
+void RoomProps::clear() {
+    animated_.clear(); phase_ = timer_ = 0; lastAmount_ = 256; effectVertices_ = updates_ = 0;
 }

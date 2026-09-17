@@ -9,11 +9,11 @@ const char* parsePropData(const unsigned char* bytes, std::size_t size, PropData
     auto word = [&]() { unsigned v = 0; for (unsigned i = 0; i < 4; ++i) v |= unsigned(bytes[at++]) << (8*i); return v; };
     auto scalar = [&]() { unsigned bits = word(); float v; std::memcpy(&v, &bits, 4); return v; };
     const unsigned magic = word();
-    if (magic != 0x31504344 && magic != 0x32504344) return "Expected DCP1 or DCP2 static visual data.";
+    if (magic != 0x31504344 && magic != 0x32504344 && magic != 0x33504344) return "Expected DCP1, DCP2 or DCP3 visual data.";
     unsigned textures = word(), parts = word(), textureBytes = 0, vertices = 0;
     if (textures > MaxPropTextures || parts > MaxPropParts) return "Static prop texture/part budget exceeded.";
     PropData data;
-    if (magic == 0x32504344) {
+    if (magic != 0x31504344) {
         if (size - at < 4) return "Truncated static visual flags.";
         const unsigned flags = word();
         if (flags != 1) return "Invalid static visual flags.";
@@ -54,6 +54,24 @@ const char* parsePropData(const unsigned char* bytes, std::size_t size, PropData
         data.parts.push_back(std::move(part));
     }
     for (bool referenced : used) if (!referenced) return "Unreferenced prop texture.";
+    if (magic == 0x33504344) {
+        if (size - at < 36) return "Truncated light effect settings.";
+        auto& effect = data.lightEffect;
+        effect.mode = word(); effect.frequency = scalar(); effect.minimum = scalar(); effect.activationRange = scalar();
+        effect.position = {scalar(), scalar(), scalar()}; effect.seed = word();
+        const unsigned count = word();
+        if (!validLightEffect(effect) || !count || count > MaxLightEffectVertices || size - at < std::size_t(count) * 8)
+            return "Invalid light effect settings or affected-vertex budget.";
+        data.lightChanges.reserve(count);
+        unsigned previous = 0;
+        for (unsigned i = 0; i < count; ++i) {
+            PropLightChange change{word(), word()};
+            if (change.vertex >= vertices || (i && change.vertex <= previous) || (change.onColor >> 24) != 255)
+                return "Invalid light effect vertex order, index or color.";
+            previous = change.vertex; data.lightChanges.push_back(change);
+        }
+        data.hasLightEffect = true;
+    }
     if (at != size) return "Unexpected trailing prop data.";
     output = std::move(data); return nullptr;
 }

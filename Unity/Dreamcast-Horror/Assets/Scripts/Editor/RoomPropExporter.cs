@@ -13,9 +13,9 @@ public static class RoomPropExporter
     public sealed class Bundle {
         public byte[] manifest;
         public readonly Dictionary<string, byte[]> textures = new Dictionary<string, byte[]>();
-        public int triangles, parts, textureBytes;
+        public int triangles, parts, textureBytes, effectVertices;
     }
-    sealed class Part { public int texture; public byte[] vertices; }
+    sealed class Part { public int texture; public byte[] vertices; public System.Collections.Generic.List<uint> onColors; }
     struct Vertex {
         public Vector3 position, normal;
         public Vector2 uv;
@@ -25,12 +25,35 @@ public static class RoomPropExporter
             uv = (a.uv+b.uv)*.5f, color = (a.color+b.color)*.5f
         };
     }
+    public static bool IsDynamic(MeshRenderer renderer)
+    {
+        var objective = UnityEngine.Object.FindAnyObjectByType<KeyDoorPresentation>();
+        return renderer.GetComponentInParent<CppPlayerVisual>() != null ||
+            (objective != null && ((objective.KeyVisual != null && renderer.transform.IsChildOf(objective.KeyVisual)) ||
+             (objective.DoorVisual != null && renderer.transform.IsChildOf(objective.DoorVisual))));
+    }
     public static Bundle Build()
     {
         var lighting = RoomLightingBake.FromScene();
+        var effect = lighting?.Effect;
+        foreach(var receiver in UnityEngine.Object.FindObjectsByType<DreamcastContactSurface>().Where(x=>x.isActiveAndEnabled)) {
+            var r=receiver.GetComponent<MeshRenderer>();
+            if(lighting==null || r==null || !r.enabled || !r.receiveShadows || IsDynamic(r) ||
+               r.shadowCastingMode==UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly || receiver.GetComponent<MeshFilter>()?.sharedMesh==null)
+                throw new InvalidDataException("Contact surface '"+receiver.name+"' requires active room lighting and a visible, stationary mesh with Receive Shadows enabled.");
+        }
+
         var result = new Bundle(); var parts = new List<Part>();
         var textureIds = new Dictionary<Texture2D, int>();
         var names = new List<string>(); var dimensions = new List<Vector2Int>();
+        int Register(byte[] bytes) {
+            using var sha = SHA256.Create();
+            string name = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant().Substring(0,32) + ".rgb";
+            int id=names.IndexOf(name);
+            if(id<0) { id=names.Count; names.Add(name); dimensions.Add(new Vector2Int(BitConverter.ToInt32(bytes,4),BitConverter.ToInt32(bytes,8))); result.textures.Add(name,bytes); }
+            else if(!result.textures[name].SequenceEqual(bytes)) throw new InvalidDataException("Prop texture hash collision.");
+            return id;
+        }
         int Texture(Texture2D source) {
             if (textureIds.TryGetValue(source, out int existing)) return existing;
             string path = AssetDatabase.GetAssetPath(source);
@@ -51,16 +74,7 @@ public static class RoomPropExporter
                     if (c.a != 255) throw new InvalidDataException("Prop texture '" + source.name + "' contains transparency; this static-prop pass supports opaque textures only.");
                     writer.Write((ushort)(((c.r >> 3) << 11) | ((c.g >> 2) << 5) | (c.b >> 3)));
                 }
-                byte[] bytes = stream.ToArray();
-                using var sha = SHA256.Create();
-                string name = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant().Substring(0,32) + ".rgb";
-                int id = names.IndexOf(name);
-                if (id < 0) {
-                    if (names.Count >= 8 || result.textureBytes + w * h * 2 > 524288)
-                        throw new InvalidDataException("Static prop textures exceed eight unique textures or 512 KiB RGB565. Reuse or reduce textures.");
-                    id = names.Count; names.Add(name); dimensions.Add(new Vector2Int(w,h));
-                    result.textures.Add(name, bytes); result.textureBytes += w * h * 2;
-                } else if (!result.textures[name].SequenceEqual(bytes)) throw new InvalidDataException("Prop texture hash collision.");
+                int id = Register(stream.ToArray());
                 textureIds.Add(source,id); return id;
             } finally { UnityEngine.Object.DestroyImmediate(image); }
         }
@@ -68,6 +82,7 @@ public static class RoomPropExporter
         if (animated != null) throw new InvalidDataException("Skinned model '" + animated.name + "' cannot export yet; only static props are supported.");
         foreach (var renderer in UnityEngine.Object.FindObjectsByType<MeshRenderer>().Where(x => x.enabled)
                      .OrderBy(x => GlobalObjectId.GetGlobalObjectIdSlow(x).ToString(), StringComparer.Ordinal)) {
+            if (renderer.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly) continue;
             var filter = renderer.GetComponent<MeshFilter>();
             if (filter == null || filter.sharedMesh == null) continue;
             string path = AssetDatabase.GetAssetPath(filter.sharedMesh);
@@ -75,10 +90,7 @@ public static class RoomPropExporter
             // Legacy exports keep primitive proxies. Lit rooms export actual static surfaces.
             if (primitive && lighting == null) continue;
             if (string.IsNullOrEmpty(path)) throw new InvalidDataException("Prop mesh has no source asset: " + renderer.name);
-            var objective = UnityEngine.Object.FindAnyObjectByType<KeyDoorPresentation>();
-            bool dynamic = renderer.GetComponentInParent<CppPlayerVisual>() != null ||
-                (objective != null && ((objective.KeyVisual != null && renderer.transform.IsChildOf(objective.KeyVisual)) ||
-                (objective.DoorVisual != null && renderer.transform.IsChildOf(objective.DoorVisual))));
+            bool dynamic = IsDynamic(renderer);
             if (dynamic && primitive) continue;
             if (dynamic)
                 throw new InvalidDataException("Custom key/door models require dynamic visual binding, not static prop export: " + renderer.name);
@@ -93,6 +105,7 @@ public static class RoomPropExporter
             if (!float.IsFinite(transform.determinant) || Mathf.Abs(transform.determinant) < 1e-10f)
                 throw new InvalidDataException("Prop has a zero or invalid transform scale: " + renderer.name);
             Matrix4x4 normalTransform = transform.inverse.transpose;
+            bool contactCreated=false;
             for (int sub = 0; sub < mesh.subMeshCount; ++sub) {
                 if (mesh.GetTopology(sub) != MeshTopology.Triangles) throw new InvalidDataException("Only triangle meshes export: " + renderer.name);
                 int[] indices = mesh.GetTriangles(sub); if (indices.Length == 0) continue;
@@ -101,6 +114,9 @@ public static class RoomPropExporter
                 Material mat = renderer.sharedMaterials[sub];
                 if (mat == null) throw new InvalidDataException("Missing prop material: " + renderer.name);
                 string shader = mat.shader.name;
+                bool glowing = effect != null && effect.glowingSurfaces.Contains(renderer);
+                if (glowing && !shader.Contains("Unlit") && !mat.IsKeywordEnabled("_EMISSION"))
+                    throw new InvalidDataException("Linked glowing surface '" + renderer.name + "': each material must be Unlit or have Emission Color enabled.");
                 bool bake = lighting != null && !shader.Contains("Unlit");
                 if (bake && normals.Length != vertices.Length)
                     throw new InvalidDataException("Missing normals for lighting on '" + renderer.name + "'. Recalculate mesh normals before export.");
@@ -112,7 +128,14 @@ public static class RoomPropExporter
                     throw new InvalidDataException("Transparent/cutout prop material is unsupported: " + mat.name);
                 foreach (string feature in new[] { "_BumpMap", "_MetallicGlossMap", "_OcclusionMap", "_EmissionMap", "_DetailAlbedoMap" })
                     if (mat.HasProperty(feature) && mat.GetTexture(feature) != null) throw new InvalidDataException("Prop material '" + mat.name + "' uses " + feature + "; bake details into its base-color PNG.");
-                if (mat.IsKeywordEnabled("_EMISSION")) throw new InvalidDataException("Emissive prop material is unsupported: " + mat.name);
+                Color emission = Color.black;
+                if (mat.IsKeywordEnabled("_EMISSION")) {
+                    if (!mat.HasProperty("_EmissionColor")) throw new InvalidDataException("Emissive material '" + mat.name + "' needs an Emission Color property.");
+                    emission = mat.GetColor("_EmissionColor");
+                    if (!float.IsFinite(emission.r) || !float.IsFinite(emission.g) || !float.IsFinite(emission.b) ||
+                        emission.r < 0 || emission.g < 0 || emission.b < 0 || Mathf.Max(emission.r, emission.g, emission.b) > 8)
+                        throw new InvalidDataException("Material '" + mat.name + "': Emission Color RGB must be finite, nonnegative and at most 8. Reduce its HDR intensity.");
+                }
                 var baseMap = mat.HasProperty(map) ? mat.GetTexture(map) : null;
                 if (baseMap != null && !(baseMap is Texture2D)) throw new InvalidDataException("Prop base map must be a 2D PNG: " + mat.name);
                 var texture = baseMap as Texture2D;
@@ -125,7 +148,6 @@ public static class RoomPropExporter
                     if (Vector3.Cross(vertices[b]-vertices[a],vertices[c]-vertices[a]).sqrMagnitude > 1e-14f && Mathf.Abs(u.x*v.y-u.y*v.x) < 1e-10f)
                         throw new InvalidDataException("Collapsed texture UVs on '" + renderer.name + "' (triangle " + i/3 + "). Re-unwrap the mesh or use an untextured material; a line of texture would otherwise stretch across this face.");
                 }
-                using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
                 Vertex ReadVertex(int index) {
                     Vector3 p = transform.MultiplyPoint3x4(vertices[index]);
                     Vector2 tex = uv.Length == vertices.Length ? Vector2.Scale(uv[index], scale) + offset : Vector2.zero;
@@ -137,40 +159,88 @@ public static class RoomPropExporter
                     return new Vertex { position=p, uv=tex, color=c,
                         normal=bake ? normalTransform.MultiplyVector(normals[index]).normalized : Vector3.up };
                 }
-                void WriteVertex(Vertex v) {
-                    Color32 packed = bake ? v.color * lighting.Sample(v.position, v.normal, renderer.gameObject.layer) : v.color;
-                    writer.Write(v.position.x); writer.Write(v.position.y); writer.Write(v.position.z); writer.Write(v.uv.x); writer.Write(v.uv.y);
-                    writer.Write(packed.r); writer.Write(packed.g); writer.Write(packed.b); writer.Write(packed.a);
-                }
-                void Triangle(Vertex a, Vertex b, Vertex c, int depth) {
-                    float ab=(a.position-b.position).sqrMagnitude, bc=(b.position-c.position).sqrMagnitude, ca=(c.position-a.position).sqrMagnitude;
-                    if (bake && Mathf.Max(ab,bc,ca) > lighting.MaxEdge*lighting.MaxEdge) {
-                        if (depth >= 24) throw new InvalidDataException("Lighting subdivision is excessive on '"+renderer.name+"'. Reduce its scale or increase maximum triangle edge.");
-                        // Bisect only the longest edge: thin walls should not pay
-                        // for repeatedly splitting their already short edges.
-                        if (ab >= bc && ab >= ca) { var mid=Vertex.Mid(a,b); Triangle(a,mid,c,depth+1); Triangle(mid,b,c,depth+1); }
-                        else if (bc >= ca) { var mid=Vertex.Mid(b,c); Triangle(a,b,mid,depth+1); Triangle(a,mid,c,depth+1); }
-                        else { var mid=Vertex.Mid(c,a); Triangle(a,b,mid,depth+1); Triangle(mid,b,c,depth+1); }
-                        return;
+                // Validate source vertices before rasterizing their contact map.
+                for(int v=0;v<indices.Length;++v) ReadVertex(indices[v]);
+                var contact=RoomContactBake.Create(renderer,sub,mat,textureId<0 ? null : result.textures[names[textureId]],lighting);
+                contactCreated |= contact!=null;
+                int contactId=contact==null ? -1 : Register(contact.Texture);
+                for(int pass=0;pass<(contact==null ? 1 : 2);++pass) {
+                    bool contactPass=pass==1;
+                    using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
+                    var onColors = effect != null ? new List<uint>() : null;
+                    void WriteVertex(Vertex v) {
+                        Color32 Shade(bool on) {
+                            Color shaded = bake ? v.color * lighting.Sample(v.position, v.normal, renderer.gameObject.layer, renderer.receiveShadows, on, !contactPass) : v.color;
+                            if (!on && glowing && shader.Contains("Unlit")) shaded = Color.black;
+                            Color glow = !on && glowing ? Color.black : emission;
+                            shaded.r += glow.r; shaded.g += glow.g; shaded.b += glow.b;
+                            float peak = Mathf.Max(1, shaded.r, shaded.g, shaded.b);
+                            return new Color(shaded.r / peak, shaded.g / peak, shaded.b / peak, 1);
+                        }
+                        Color32 packed = Shade(effect == null);
+                        if (onColors != null) { Color32 on = Shade(true); onColors.Add((uint)(on.r | on.g << 8 | on.b << 16) | 0xff000000u); }
+                        var exportUV=contactPass ? contact.UV(v.position) : v.uv;
+                        writer.Write(v.position.x); writer.Write(v.position.y); writer.Write(v.position.z); writer.Write(exportUV.x); writer.Write(exportUV.y);
+                        writer.Write(packed.r); writer.Write(packed.g); writer.Write(packed.b); writer.Write(packed.a);
                     }
-                    if (++result.triangles > 4096) throw new InvalidDataException("Static room exceeds 4,096 triangles while exporting '"+renderer.name+"'. Increase lighting's maximum triangle edge, simplify meshes or remove placements.");
-                    WriteVertex(a); WriteVertex(b); WriteVertex(c);
+                    void Triangle(Vertex a, Vertex b, Vertex c, int depth) {
+                        float ab=(a.position-b.position).sqrMagnitude, bc=(b.position-c.position).sqrMagnitude, ca=(c.position-a.position).sqrMagnitude;
+                        if (bake && Mathf.Max(ab,bc,ca) > lighting.MaxEdge*lighting.MaxEdge) {
+                            if (depth >= 24) throw new InvalidDataException("Lighting subdivision is excessive on '"+renderer.name+"'. Reduce its scale or increase maximum triangle edge.");
+                            // Bisect only the longest edge: thin walls should not pay
+                            // for repeatedly splitting their already short edges.
+                            if (ab >= bc && ab >= ca) { var mid=Vertex.Mid(a,b); Triangle(a,mid,c,depth+1); Triangle(mid,b,c,depth+1); }
+                            else if (bc >= ca) { var mid=Vertex.Mid(b,c); Triangle(a,b,mid,depth+1); Triangle(a,mid,c,depth+1); }
+                            else { var mid=Vertex.Mid(c,a); Triangle(a,b,mid,depth+1); Triangle(mid,b,c,depth+1); }
+                            return;
+                        }
+                        if (++result.triangles > 4096) throw new InvalidDataException("Static room exceeds 4,096 triangles while exporting '"+renderer.name+"'. Increase lighting's maximum triangle edge, simplify meshes or remove placements.");
+                        WriteVertex(a); WriteVertex(b); WriteVertex(c);
+                    }
+                    for(int i=0;i<indices.Length;i+=3) if(contact==null || contact.Contains(i/3)==contactPass) Triangle(ReadVertex(indices[i]),ReadVertex(indices[i+1]),ReadVertex(indices[i+2]),0);
+                    // Bake mirrored Unity object transforms by correcting winding in Unity space.
+                    byte[] data = stream.ToArray();
+                    if (transform.determinant < 0) {
+                        for (int i = 0; i < data.Length; i += 72)
+                            for (int k = 0; k < 24; ++k) { byte temp = data[i+24+k]; data[i+24+k] = data[i+48+k]; data[i+48+k] = temp; }
+                        if (onColors != null) for (int i = 0; i < onColors.Count; i += 3) {
+                            uint temp = onColors[i+1]; onColors[i+1] = onColors[i+2]; onColors[i+2] = temp;
+                        }
+                    }
+                    if(data.Length>0) parts.Add(new Part { texture = contactPass ? contactId : textureId, vertices = data, onColors = onColors });
                 }
-                for(int i=0;i<indices.Length;i+=3) Triangle(ReadVertex(indices[i]),ReadVertex(indices[i+1]),ReadVertex(indices[i+2]),0);
-                // Bake mirrored Unity object transforms by correcting winding in Unity space.
-                byte[] data = stream.ToArray();
-                if (transform.determinant < 0)
-                    for (int i = 0; i < data.Length; i += 72)
-                        for (int k = 0; k < 24; ++k) { byte temp = data[i+24+k]; data[i+24+k] = data[i+48+k]; data[i+48+k] = temp; }
-                parts.Add(new Part { texture = textureId, vertices = data });
+                if(parts.Count>32) throw new InvalidDataException("Contact surfaces exceed the 32 material-part budget. Reduce receivers or material slots.");
             }
+            var receiverSettings=renderer.GetComponent<DreamcastContactSurface>();
+            if(receiverSettings!=null && receiverSettings.isActiveAndEnabled && receiverSettings.strength>0 && !contactCreated)
+                throw new InvalidDataException("Contact surface '"+renderer.name+"' has no flat upward faces. Select a horizontal floor mesh.");
         }
+        // Drop original maps wholly replaced by contact maps before counting VRAM.
+        for(int i=names.Count-1;i>=0;--i) if(!parts.Any(p=>p.texture==i)) {
+            result.textures.Remove(names[i]); names.RemoveAt(i); dimensions.RemoveAt(i);
+            foreach(var part in parts) if(part.texture>i) --part.texture;
+        }
+        result.textureBytes=dimensions.Sum(d=>d.x*d.y*2);
+        if(names.Count>8 || result.textureBytes>524288) throw new InvalidDataException("Static textures including contact maps exceed eight textures or 512 KiB RGB565. Reduce contact resolution or reuse textures.");
         using (var stream = new MemoryStream()) using (var writer = new BinaryWriter(stream)) {
-            writer.Write(lighting == null ? 0x31504344u : 0x32504344u); writer.Write(names.Count); writer.Write(parts.Count);
+            writer.Write(lighting == null ? 0x31504344u : effect == null ? 0x32504344u : 0x33504344u); writer.Write(names.Count); writer.Write(parts.Count);
             if (lighting != null) writer.Write(1u); // DCP2: static room visuals included; suppress collision proxies.
             for (int i = 0; i < names.Count; ++i) { writer.Write(dimensions[i].x); writer.Write(dimensions[i].y); writer.Write(Encoding.ASCII.GetBytes(names[i])); }
             foreach (var part in parts) { writer.Write(part.vertices.Length / 24); writer.Write(part.texture); writer.Write(part.vertices); }
+            if (effect != null) {
+                var changes = new List<(uint index, uint color)>(); uint index = 0;
+                foreach (var part in parts) for (int i = 0; i < part.onColors.Count; ++i, ++index)
+                    if (part.onColors[i] != BitConverter.ToUInt32(part.vertices, i*24+20)) changes.Add((index, part.onColors[i]));
+                if (changes.Count == 0) throw new InvalidDataException("Light Effect changes no exported vertex colors. Increase its range/intensity, move it outside opaque geometry, or link a glowing surface.");
+                if (changes.Count > 2048) throw new InvalidDataException($"Light Effect affects {changes.Count:N0} vertices; Dreamcast limit is 2,048. Reduce its range, use culling layers, or simplify the affected geometry.");
+                result.effectVertices = changes.Count;
+                writer.Write((uint)effect.mode); writer.Write(effect.frequency); writer.Write(effect.minimumBrightness); writer.Write(effect.activationRange);
+                var pos = effect.transform.position; writer.Write(pos.x); writer.Write(pos.y); writer.Write(pos.z); writer.Write((uint)effect.seed);
+                writer.Write(changes.Count);
+                foreach (var change in changes) { writer.Write(change.index); writer.Write(change.color); }
+            }
             result.manifest = stream.ToArray(); result.parts = parts.Count;
+            if (result.manifest.Length > 300000) throw new InvalidDataException("Static visuals and lighting effects exceed 300,000 bytes. Reduce triangles or affected light-effect vertices.");
         }
         return result;
     }

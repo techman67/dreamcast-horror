@@ -10,10 +10,10 @@ def read_bundle(export):
     if not 12 <= len(data) <= 300000:
         raise ValueError('Missing/oversized static props; export the scene again.')
     magic, textures, parts = struct.unpack_from('<III', data)
-    if magic not in (0x31504344, 0x32504344) or textures > 8 or parts > 32:
+    if magic not in (0x31504344, 0x32504344, 0x33504344) or textures > 8 or parts > 32:
         raise ValueError('Invalid static prop header/budget.')
     at, total, vertices = 12, 0, 0
-    if magic == 0x32504344:
+    if magic != 0x31504344:
         if len(data) < 16 or struct.unpack_from('<I', data, 12)[0] != 1:
             raise ValueError('Invalid/truncated static visual flags.')
         at = 16
@@ -48,6 +48,22 @@ def read_bundle(export):
             if any(not math.isfinite(v) or abs(v)>10000 for v in values) or color >> 24 != 255:
                 raise ValueError('Invalid prop position/UV/color.')
         at += count*24
+    if magic == 0x33504344:
+        if at + 36 > len(data):
+            raise ValueError('Truncated light effect settings.')
+        mode, frequency, minimum, activation, x, y, z, seed, count = struct.unpack_from('<I6fII',data,at)
+        at += 36
+        if (mode > 2 or any(not math.isfinite(v) for v in (frequency,minimum,activation,x,y,z))
+                or not .1 <= frequency <= 10 or not 0 <= minimum <= 1 or not 0 <= activation <= 100
+                or any(abs(v)>10000 for v in (x,y,z)) or seed > 65535 or not 1 <= count <= 2048
+                or at + count*8 > len(data)):
+            raise ValueError('Invalid light effect settings or affected-vertex budget.')
+        previous = -1
+        for _ in range(count):
+            index, color = struct.unpack_from('<II',data,at); at += 8
+            if not previous < index < vertices or color >> 24 != 255:
+                raise ValueError('Invalid light effect vertex order, index or color.')
+            previous = index
     if at != len(data) or used != set(range(textures)):
         raise ValueError('Trailing prop data or unused textures.')
     return data, files

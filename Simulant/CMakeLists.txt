@@ -17,7 +17,7 @@ endif()
 
 add_library(room-core STATIC
     Game/Compatibility/Game.cpp Game/Compatibility/StaticCollisionBackend.cpp Game/Compatibility/CharacterCollision.cpp
-    Game/Core/RoomData.cpp Game/Core/AudioData.cpp Game/Core/PropData.cpp Game/Gameplay/Player.cpp Game/Gameplay/KeyDoor.cpp)
+    Game/Compatibility/World.cpp Game/Core/WorldData.cpp Game/Core/SaveData.cpp Game/Core/RoomData.cpp Game/Core/AudioData.cpp Game/Core/PropData.cpp Game/Gameplay/Player.cpp Game/Gameplay/KeyDoor.cpp)
 target_include_directories(room-core PUBLIC Game/Core Game/Compatibility Game/Gameplay)
 target_compile_features(room-core PUBLIC cxx_std_17)
 # KOS toolchains enable fast-math for rendering. Core validation needs IEEE checks.

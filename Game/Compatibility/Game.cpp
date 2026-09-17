@@ -7,6 +7,9 @@
 namespace {
 
     GameState g_state{};
+    SliceBindings g_bindings{};
+    SavePoints g_savePoints{};
+    int g_saveRequest=-1;
 
     IDisplacementBackend* g_displacement =
         nullptr;
@@ -102,8 +105,8 @@ extern "C" void game_init(
     SliceBindings bindings,
     IDisplacementBackend* displacement) {
 
-    g_displacement =
-        displacement;
+    g_displacement = displacement;
+    g_bindings=bindings; g_savePoints.count=0; g_savePoints.room=0; g_saveRequest=-1;
 
     g_state =
         GameState{};
@@ -134,6 +137,7 @@ extern "C" void game_step(
     const InputFrame* input,
     float deltaSeconds) {
 
+    g_saveRequest=-1;
     g_state.audio = {}; // Invalid steps must not replay a previous event batch.
 
     if (input == nullptr ||
@@ -177,7 +181,11 @@ extern "C" void game_step(
             }
         }
     }
-    updateKeyDoor(g_state, *g_displacement, *input, deltaSeconds);
+    InputFrame idle; updateKeyDoor(g_state,*g_displacement,idle,deltaSeconds);
+    InputFrame interaction=*input;
+    const int savePoint=game_near_save_point();
+    if(deltaSeconds>0 && savePoint>=0 && interaction.interactPressed) { g_saveRequest=savePoint; interaction.interactPressed=false; }
+    updateKeyDoor(g_state, *g_displacement, interaction, 0);
 }
 
 extern "C" Vec3 game_get_player_pos() {
@@ -215,3 +223,42 @@ extern "C" AudioEvents game_take_audio_events() {
     g_state.audio = {};
     return result;
 }
+
+extern "C" void game_set_save_points(const SavePoints* points) { if(points) g_savePoints=*points; else { g_savePoints.count=0; g_savePoints.room=0; } g_saveRequest=-1; }
+extern "C" int game_near_save_point() {
+    if(!g_displacement || g_state.completed || (g_state.playerHeight>0 && !g_state.grounded)) return -1;
+    // Existing key/door interactions retain priority when ranges overlap.
+    if(g_state.prompt!=InteractionPrompt::None) return -1;
+    int nearest=-1; float best=1000000;
+    for(unsigned i=0;i<g_savePoints.count && i<MaxSavePoints;++i) {
+        const auto& p=g_savePoints.points[i]; const auto pos=g_state.playerPos;
+        const float dx=pos.x-p.position.x,dy=pos.y+(g_state.playerHeight>0 ? g_state.playerHeight*.5f : .9f)-p.position.y,dz=pos.z-p.position.z;
+        const float d=dx*dx+dy*dy+dz*dz;
+        if(d<=p.range*p.range && d<best) { best=d; nearest=static_cast<int>(i); }
+    }
+    return nearest;
+}
+extern "C" int game_take_save_request() { int result=g_saveRequest; g_saveRequest=-1; return result; }
+extern "C" bool game_capture_progress(SaveProgress* p) {
+    if(!p || !g_displacement || g_state.completed || (g_state.playerHeight>0 && !g_state.grounded)) return false;
+    *p={g_state.playerPos,g_state.gameplayCamera.id,(g_state.hasKey ? 1u : 0u)|(g_state.doorOpen ? 2u : 0u)}; return true;
+}
+extern "C" bool game_restore_progress(const SaveProgress* p) {
+    if(!p || !g_displacement || (p->flags&~3u) || ((p->flags&2u) && !(p->flags&1u)) ||
+       !std::isfinite(p->position.x)||!std::isfinite(p->position.y)||!std::isfinite(p->position.z)||
+       std::fabs(p->position.x)>10000||std::fabs(p->position.y)>10000||std::fabs(p->position.z)>10000) return false;
+    Pose camera;
+    if(p->camera==g_bindings.gameplayCamera.id) camera=g_bindings.initialCameraPose;
+    else if(p->camera && p->camera==g_bindings.cameraTransition.cameraA.id) camera=g_bindings.cameraTransition.poseA;
+    else if(p->camera && p->camera==g_bindings.cameraTransition.cameraB.id) camera=g_bindings.cameraTransition.poseB;
+    else return false;
+    if((p->flags!=0) && g_bindings.keyDoor.keyActor.id==0) return false;
+    auto points=g_savePoints; auto backend=g_displacement; game_init(g_bindings,backend); game_set_save_points(&points);
+    g_state.playerPos=g_state.previousPlayerPos=p->position;
+    g_state.hasKey=(p->flags&1u)!=0; g_state.doorOpen=(p->flags&2u)!=0;
+    if(g_state.keyDoor.doorActor.id) backend->setDoorObstruction(g_state.keyDoor.doorActor,!g_state.doorOpen);
+    g_state.gameplayCamera.id=p->camera; g_state.cameraPose=camera;
+    InputFrame idle; updateKeyDoor(g_state,*backend,idle,0); return true;
+}
+
+extern "C" void game_set_linked_room(bool linked) { g_state.linkedRoom=linked; }

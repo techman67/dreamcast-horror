@@ -26,6 +26,7 @@ struct GameState {
     bool hasKey = false;
     bool doorOpen = false;
     bool completed = false;
+    bool linkedRoom = false;
     InteractionPrompt prompt = InteractionPrompt::None;
     SliceFeedback feedback = SliceFeedback::None;
     float feedbackSeconds = 0.0f;

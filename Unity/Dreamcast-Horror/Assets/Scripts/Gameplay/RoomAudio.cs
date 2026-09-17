@@ -27,15 +27,15 @@ public sealed class RoomAudio : IDisposable
     public int ActiveCount {
         get { int n = 0; foreach (var slot in slots) if (slot != null && slot.isPlaying) ++n; return n; }
     }
-    public RoomAudio(Transform parent)
+    public RoomAudio(Transform parent,string directory=null)
     {
         try {
-            string manifest = Path.Combine(Application.streamingAssetsPath, "sample.audio");
+            string manifest = Path.Combine(directory??Application.streamingAssetsPath, "sample.audio");
             if (new FileInfo(manifest).Length > 8192) throw new InvalidDataException("Oversized audio manifest.");
             data = NativeAudioData.Parse(File.ReadAllText(manifest));
             clips = new AudioClip[data.clips.Length];
             for (int i = 0; i < clips.Length; ++i) {
-                string path = Path.Combine(Application.streamingAssetsPath, "room-audio", data.clips[i].file);
+                string path = Path.Combine(directory??Application.streamingAssetsPath, "room-audio", data.clips[i].file);
                 int size = Validate(path);
                 if (size != data.clips[i].pcmBytes) throw new InvalidDataException("Audio size differs from export: " + path);
                 byte[] bytes = File.ReadAllBytes(path);

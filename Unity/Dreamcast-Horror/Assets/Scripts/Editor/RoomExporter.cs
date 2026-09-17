@@ -97,29 +97,39 @@ public static class RoomExporter
     [MenuItem("Dreamcast/Export sample room")]
     public static void Export()
     {
+        var settings=UnityEngine.Object.FindAnyObjectByType<DreamcastRoom>();
+        if(settings!=null) { RoomWorldExporter.Export(settings.world); return; }
+        ExportTo(Application.streamingAssetsPath);
+        string world=Path.Combine(Application.streamingAssetsPath,"sample.world"); if(File.Exists(world)) File.Delete(world);
+    }
+
+    public static void ExportTo(string directory)
+    {
         if (Application.isPlaying) throw new InvalidOperationException("Export the authored room outside Play mode.");
         string text = BuildText(); // Validate everything before replacing the artifact.
+        var saves = RoomSaveExporter.Build(text);
         var audio = RoomAudioExporter.Build();
         var props = RoomPropExporter.Build();
-        Directory.CreateDirectory(Application.streamingAssetsPath);
-        string audioDirectory = Path.Combine(Application.streamingAssetsPath, "room-audio");
+        Directory.CreateDirectory(directory);
+        string audioDirectory = Path.Combine(directory, "room-audio");
         Directory.CreateDirectory(audioDirectory);
-        string propDirectory = Path.Combine(Application.streamingAssetsPath, "prop-textures");
+        string propDirectory = Path.Combine(directory, "prop-textures");
         Directory.CreateDirectory(propDirectory);
         foreach (var pair in props.textures) {
             string asset = Path.Combine(propDirectory, pair.Key);
             if (!File.Exists(asset) || !File.ReadAllBytes(asset).SequenceEqual(pair.Value)) File.WriteAllBytes(asset, pair.Value);
         }
-        File.WriteAllBytes(Path.Combine(Application.streamingAssetsPath, "sample.props"), props.manifest);
+        File.WriteAllBytes(Path.Combine(directory, "sample.props"), props.manifest);
         // Content-addressed clips are immutable. Old unreferenced exports are not packaged.
         foreach (var pair in audio.files) {
             string asset = Path.Combine(audioDirectory, pair.Key);
             if (!File.Exists(asset) || !File.ReadAllBytes(asset).SequenceEqual(pair.Value)) File.WriteAllBytes(asset, pair.Value);
         }
-        string path = Path.Combine(Application.streamingAssetsPath, NativeGameBridge.RoomFileName);
-        string manifest = Path.Combine(Application.streamingAssetsPath, "sample.audio");
+        string path = Path.Combine(directory, NativeGameBridge.RoomFileName);
+        string manifest = Path.Combine(directory, "sample.audio");
         File.WriteAllText(manifest, audio.text, new UTF8Encoding(false));
         File.WriteAllText(path, text, new UTF8Encoding(false));
+        File.WriteAllBytes(Path.Combine(directory,"sample.saves"),saves);
         if (File.ReadAllText(path) != text) throw new IOException("Room export verification failed.");
         AssetDatabase.Refresh();
         Debug.Log($"Exported room: {path}; {audio.files.Count} sound assets; {props.triangles}/4096 static prop triangles, {props.parts}/32 parts, {props.textureBytes}/524288 prop texture bytes.");

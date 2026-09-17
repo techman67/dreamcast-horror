@@ -35,8 +35,9 @@ public static class RoomLightingChecks
             light.enabled=false; settings.ambient=new Color(.2f,.3f,.4f,1);
             Check(Mathf.Abs(RoomLightingBake.FromScene().Sample(Vector3.zero,Vector3.up,0).r-.2f)<.001f,"Disabled light exported.");
             light.enabled=true; light.type=LightType.Rectangle;
-            bool rejected=false; try { RoomLightingBake.FromScene(); } catch(InvalidDataException e) { rejected=e.Message.Contains("area lights"); }
-            Check(rejected,"Unsupported light lacks diagnostic.");
+            light.cookie=Texture2D.whiteTexture;
+            bool rejected=false; try { RoomLightingBake.FromScene(); } catch(InvalidDataException e) { rejected=e.Message.Contains("cookie"); }
+            Check(rejected,"Unsupported cookie lacks diagnostic."); light.cookie=null;
             light.type=LightType.Directional; light.transform.rotation=Quaternion.Euler(35,25,0);
             var cube=GameObject.CreatePrimitive(PrimitiveType.Cube);
             var material=new Material(Shader.Find("Universal Render Pipeline/Lit"));

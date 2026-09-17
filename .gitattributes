@@ -1,2 +1,5 @@
 # WSL executes these scripts directly; Windows checkout must not add CRLF.
 *.sh text eol=lf
+# Save-point/world manifests hash exported room bytes verbatim. A checkout on
+# another OS must not change those bytes through automatic newline conversion.
+*.room -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

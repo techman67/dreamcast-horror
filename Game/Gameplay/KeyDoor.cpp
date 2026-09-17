@@ -81,7 +81,7 @@ void updateKeyDoor(GameState& state, IDisplacementBackend& displacement,
             break;
         }
     }
-    if (state.doorOpen && crossedExit(state)) {
+    if (!state.linkedRoom && state.doorOpen && crossedExit(state)) {
         state.completed = true;
         feedback(state, SliceFeedback::Completed);
     }

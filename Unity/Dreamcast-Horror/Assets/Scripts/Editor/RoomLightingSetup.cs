@@ -42,10 +42,26 @@ public static class RoomLightingSetup
         var source=new GameObject("Warm point light"); source.transform.SetParent(root.transform,false);
         source.transform.localPosition=new Vector3(0,0,-.35f);
         var light=source.AddComponent<Light>(); light.type=LightType.Point;
-        light.color=new Color(1,.78f,.48f); light.intensity=2; light.range=5; light.shadows=LightShadows.None;
+        light.color=new Color(1,.78f,.48f); light.intensity=2; light.range=5; light.shadows=LightShadows.Hard;
         Selection.activeGameObject=root;
         EditorSceneManager.MarkSceneDirty(root.scene);
         Debug.Log("Added wall lamp and baked lighting settings. Export/Rebuild CDI to bake. Save the scene to retain these settings.");
+    }
+    // Explicit update to the existing sample; arbitrary scene lights stay user-controlled.
+    public static void ExportShadowSample()
+    {
+        try {
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+            var lamp=GameObject.Find("Sample Wall Lamp");
+            if(lamp==null) throw new InvalidOperationException("Sample wall lamp is missing.");
+            var light=lamp.GetComponentInChildren<Light>();
+            light.shadows=LightShadows.Hard;
+            EditorUtility.SetDirty(light);
+            RoomExporter.Export();
+            EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
+            AssetDatabase.SaveAssets();
+            Debug.Log("SHADOW SAMPLE EXPORTED"); EditorApplication.Exit(0);
+        } catch(Exception e) { Debug.LogException(e); EditorApplication.Exit(1); }
     }
     public static void Run()
     {

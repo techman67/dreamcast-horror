@@ -1,5 +1,6 @@
 """Stage only the Unity-exported room bundle and referenced audio; no authoring dependencies."""
 import hashlib
+import struct
 import math
 import re
 import sys
@@ -63,11 +64,33 @@ def audio_records(text):
         raise ValueError('Incomplete or invalid audio manifest. Export the room again.') from error
 
 
+def save_manifest(room, data=None):
+    key=2166136261
+    for b in room: key=((key^b)*16777619)&0xffffffff
+    if data is None: return struct.pack('<III',0x31505344,key,0)
+    if len(data)<12: raise ValueError('Truncated save-point manifest.')
+    magic, room_key, count=struct.unpack_from('<III',data)
+    if magic!=0x31505344 or room_key!=key or count>16 or len(data)!=12+count*68:
+        raise ValueError('Save points do not match room or exceed 16 points. Re-export.')
+    ids=set()
+    for i in range(count):
+        ident,x,y,z,radius,prompt=struct.unpack_from('<I4f48s',data,12+i*68)
+        if not ident or ident in ids or not all(math.isfinite(v) and abs(v)<=10000 for v in (x,y,z)) or not .25<=radius<=3:
+            raise ValueError('Invalid save-point ID, position or radius.')
+        ids.add(ident)
+        text,sep,padding=prompt.partition(b'\0')
+        if not sep or not text or any(c<32 or c>126 for c in text) or any(padding):
+            raise ValueError('Invalid save prompt.')
+    return data
+
+
 def stage(export: Path, assets: Path):
     room = (export / 'sample.room').read_bytes()
     manifest = (export / 'sample.audio').read_bytes()
     if len(room) > 65536 or len(manifest) > 8192:
         raise ValueError('Export exceeds room/manifest text budget.')
+    save_path=export / 'sample.saves'
+    saves=save_manifest(room,save_path.read_bytes() if save_path.exists() else None)
     records = audio_records(manifest.decode('utf-8'))
     count = len(records)
     files = {}
@@ -109,8 +132,10 @@ def stage(export: Path, assets: Path):
             old.unlink() # Remove the previous hard-coded bank from the staged CDI.
     (assets / 'sample.audio').write_bytes(manifest)
     (assets / 'sample.room').write_bytes(room)
+    (assets / 'sample.saves').write_bytes(saves)
     print(f'Staged exported room: {count} audio assets, {total} PCM bytes (512 KiB limit).')
 
 
 if __name__ == '__main__':
-    stage(Path(sys.argv[1]), Path(sys.argv[2]))
+    from stage_world import stage_project
+    stage_project(Path(sys.argv[1]), Path(sys.argv[2]))

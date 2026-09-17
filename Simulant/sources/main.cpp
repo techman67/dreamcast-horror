@@ -1,5 +1,6 @@
 #include <simulant/simulant.h>
 #include "RoomScene.h"
+#include "RoomLoading.h"
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -9,12 +10,14 @@ public:
     explicit RoomApp(const smlt::AppConfig& config) : smlt::Application(config) {}
     bool init() override {
         scenes->register_scene<RoomScene>("main");
+        scenes->register_scene<RoomLoadingScene>("loading");
         return true;
     }
 };
 
 int main(int, char**) {
     try {
+        loadWorldManifest();
         validateExportedRoom();
         smlt::AppConfig config;
         config.title = "Dreamcast Horror - exported room";

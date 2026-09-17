@@ -40,4 +40,13 @@ with tempfile.TemporaryDirectory(prefix='prop-bundle-') as tmp:
  assert list((target/'prop-textures').iterdir())==[]
  (source/'sample.props').write_bytes(b'DCP2'+struct.pack('<III',0,0,1))
  assert read_bundle(source)[0][:4]==b'DCP2'
+ effect=b'DCP3'+struct.pack('<III',0,1,1)+struct.pack('<Ii',3,-1)+vertices
+ effect+=struct.pack('<I6fII',2,4,.2,3,0,0,0,1,1)+struct.pack('<II',0,0xff123456)
+ (source/'sample.props').write_bytes(effect)
+ assert read_bundle(source)[0]==effect
+ for bad in (effect[:-1],effect+b'\0',effect[:-8]+struct.pack('<II',3,0xffffffff),
+             effect[:-8]+struct.pack('<II',0,0x00ffffff),effect[:96]+struct.pack('<I',3)+effect[100:]):
+  (source/'sample.props').write_bytes(bad)
+  try:read_bundle(source);raise AssertionError('Invalid light effect accepted')
+  except ValueError:pass
 print('Prop bundle checks passed: real export, corrupt/missing dependencies, malformed geometry and stale texture removal.')

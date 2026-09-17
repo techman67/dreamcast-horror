@@ -55,7 +55,7 @@ and Start to reset. Desktop E/R bindings only apply when a keyboard is exposed t
 the game; a Windows keyboard mapped to an emulated controller uses Flycast's mappings.
 This computer has `FlyCast/mappings/SDL_Keyboard.cfg` installed from
 `Simulant/config/SDL_Keyboard.cfg`: WASD maps to the stick, arrows to the D-pad,
-E to A, Space to B (jump), R to Start, and Tab opens the emulator menu. To install it on another
+E to A, Space to B (jump), L to Y (load), R to Start, and Tab opens the emulator menu. To install it on another
 machine, close Flycast and copy the supplied mapping to its `mappings` directory;
 back up any existing keyboard mapping first. The launcher preserves user mappings.
 
@@ -161,3 +161,18 @@ and texture filenames/sizes alongside its audio.
 Stairs rooms support **Space / controller B** to jump. The supplied Flycast
 keyboard mapping maps Space to Dreamcast B. Approach the landing edge before
 jumping across the right-hand gap; hold D during flight.
+
+## Save-point slice
+
+See [authoring and testing save points](../Docs/save-points.md). The lighting test
+room has a save journal on the left box. Saves use KOS VMU storage on Dreamcast
+and ordinary files on desktop, through the same validated progress format.
+The CDI serial is fixed to `IND-DCH001` for consistent Flycast per-game VMUs.
+
+## Connected rooms
+
+See [connected-room authoring](../Docs/connected-rooms.md). The world catalogue and
+per-room bundles are exported from Unity and staged together. Simulant passes through
+a small loading scene so the previous room is destroyed before loading its successor.
+For the desktop transition check, run with `SIMULANT_WORLD_CHECK=1`; it performs
+twelve scene transitions and asserts that room scenes never overlap.

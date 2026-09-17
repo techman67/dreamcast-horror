@@ -1,10 +1,20 @@
 #include <exception>
 #include "Game.h"
+#include "World.h"
 #include "RoomData.h"
 #include "AudioData.h"
+#include "LightEffect.h"
 #include "StaticCollisionBackend.h"
 
+extern "C" __declspec(dllexport)
+float unity_light_effect_advance(float phase, float dt, float frequency) { return advanceLightPhase(phase, dt, frequency); }
+extern "C" __declspec(dllexport)
+float unity_light_effect_sample(const LightEffectSettings* settings, float phase, float x, float y, float z) {
+    return settings ? sampleLightEffect(*settings, phase, {x,y,z}) : 0;
+}
+
 namespace {
+    SavePoints g_points{};
     RoomData g_room{};
     AudioData g_audio{};
     StaticCollisionBackend g_collisionBackend{};
@@ -36,6 +46,7 @@ extern "C" __declspec(dllexport)
 int unity_game_init(const char* roomText) {
     // A failed reload cannot continue running the previous room.
     game_init(SliceBindings{}, nullptr);
+    g_points=SavePoints{};
     try {
         g_error = parseRoomData(roomText, g_room);
         if (g_error != nullptr) return 0;
@@ -124,3 +135,44 @@ void unity_game_step_v2(float moveX, float moveY, float deltaSeconds, int intera
     const InputFrame input{{moveX, moveY}, interactPressed != 0, jumpPressed != 0};
     game_step(&input, deltaSeconds);
 }
+
+#include "SharedHost/FileSaveStorage.h"
+
+extern "C" __declspec(dllexport)
+const char* unity_save_configure(const unsigned char* bytes,unsigned size,unsigned roomHash) {
+    try {
+        SavePoints points; const char* error=parseSavePoints(bytes,size,points);
+        if(error) return error;
+        if(points.room!=roomHash) return "Save-point manifest does not match the room. Export again.";
+        g_points=points; game_set_save_points(&g_points); return nullptr;
+    } catch(...) { return "Unable to read save-point manifest."; }
+}
+extern "C" __declspec(dllexport)
+int unity_save_near() { return game_near_save_point(); }
+extern "C" __declspec(dllexport)
+int unity_save_requested() { return game_take_save_request(); }
+extern "C" __declspec(dllexport)
+const char* unity_save_prompt(int index) { return index>=0 && unsigned(index)<g_points.count ? g_points.points[index].prompt : ""; }
+extern "C" __declspec(dllexport)
+int unity_save_action(const char* directory,int load) {
+    try {
+        if(!directory || !*directory || g_error) return int(SaveResult::NotReady);
+        FileSaveStorage storage(directory); SaveProgress progress;
+        if(world_active()) return int(load ? world_load(storage) : world_save(storage));
+        if(load) { auto r=readProgress(storage,g_points.room,progress); if(r==SaveResult::Ok && !game_restore_progress(&progress)) r=SaveResult::Invalid; return int(r); }
+        if(!game_capture_progress(&progress)) return int(SaveResult::NotReady);
+        return int(writeProgress(storage,g_points.room,progress));
+    } catch(...) { return int(SaveResult::IoError); }
+}
+extern "C" __declspec(dllexport)
+const char* unity_save_result(int result) { return saveResultText(static_cast<SaveResult>(result)); }
+
+extern "C" __declspec(dllexport) const char* unity_world_configure(const unsigned char* bytes,unsigned size,unsigned start) { return world_configure(bytes,size,start); }
+extern "C" __declspec(dllexport) void unity_world_clear() { world_clear(); }
+extern "C" __declspec(dllexport) unsigned unity_world_room() { auto r=world_room(); return r ? r->id : 0; }
+extern "C" __declspec(dllexport) unsigned unity_world_hash() { auto r=world_room(); return r ? r->hash : 0; }
+extern "C" __declspec(dllexport) const char* unity_world_scene() { auto r=world_room(); return r ? r->scene : ""; }
+extern "C" __declspec(dllexport) int unity_world_enter() { return world_enter() ? 1 : 0; }
+extern "C" __declspec(dllexport) int unity_world_near() { return world_near_link(); }
+extern "C" __declspec(dllexport) int unity_world_depart(int interact) { return world_depart(interact!=0) ? 1 : 0; }
+extern "C" __declspec(dllexport) int unity_world_pending() { return world_pending() ? 1 : 0; }
