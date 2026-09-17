@@ -1,4 +1,5 @@
 #include "Player.h"
+#include <cmath>
 
 namespace {
 
@@ -12,14 +13,17 @@ void playerUpdate(
     const InputFrame& input,
     float deltaSeconds) {
 
+    // Movement speed is a game rule, independent of keyboard diagonals or sticks.
+    const float length = std::hypot(input.move.x, input.move.y);
+    const float scale = length > 1.0f ? 1.0f / length : 1.0f;
     const Vec3 desired{
-        input.move.x *
+        input.move.x * scale *
             playerSpeed *
             deltaSeconds,
 
         0.0f,
 
-        input.move.y *
+        input.move.y * scale *
             playerSpeed *
             deltaSeconds
     };

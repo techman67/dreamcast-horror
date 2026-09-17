@@ -71,8 +71,11 @@ public sealed class CollisionDebug : MonoBehaviour
         if (Application.isPlaying)
         {
             if (!NativeGameBridge.IsInitialized || NativeGameBridge.LoadedShapes == null) return;
-            foreach (NativeRoomDiagnostics.Shape shape in NativeGameBridge.LoadedShapes)
-                DrawShape(shape);
+            for (int i = 0; i < NativeGameBridge.LoadedShapes.Length; ++i)
+            {
+                if (NativeGameBridge.SliceView.DoorOpen && i == NativeGameBridge.SliceBindings.doorShapeIndex) continue;
+                DrawShape(NativeGameBridge.LoadedShapes[i]);
+            }
         }
         else
         {

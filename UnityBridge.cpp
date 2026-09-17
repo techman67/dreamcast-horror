@@ -1,12 +1,35 @@
 #include <exception>
 #include "Game.h"
 #include "RoomData.h"
+#include "AudioData.h"
 #include "StaticCollisionBackend.h"
 
 namespace {
     RoomData g_room{};
+    AudioData g_audio{};
     StaticCollisionBackend g_collisionBackend{};
     const char* g_error = "Game has not been initialized.";
+}
+
+extern "C" __declspec(dllexport)
+const char* unity_audio_parse(const char* text) {
+    try { return parseAudioData(text, g_audio); }
+    catch (const std::exception&) { return "Unable to parse audio manifest."; }
+}
+extern "C" __declspec(dllexport)
+unsigned unity_audio_clip_count() { return g_audio.clipCount; }
+extern "C" __declspec(dllexport)
+unsigned unity_audio_source_count() { return g_audio.sourceCount; }
+extern "C" __declspec(dllexport)
+void unity_audio_clip(unsigned i, AudioClipData* out) { if (out && i < g_audio.clipCount) *out = g_audio.clips[i]; }
+extern "C" __declspec(dllexport)
+void unity_audio_cue(unsigned i, AudioCueData* out) { if (out && i < 4) *out = g_audio.cues[i]; }
+extern "C" __declspec(dllexport)
+void unity_audio_source_v2(unsigned i, RoomSoundData* out) { if (out && i < g_audio.sourceCount) *out = g_audio.sources[i]; }
+
+extern "C" __declspec(dllexport)
+void unity_game_take_audio_events(AudioEvents* events) {
+    if (events != nullptr) *events = game_take_audio_events();
 }
 
 extern "C" __declspec(dllexport)
@@ -19,6 +42,12 @@ int unity_game_init(const char* roomText) {
         if (!g_collisionBackend.configure(g_room.shapes, g_room.shapeCount,
                                           g_room.bindings.playerCollisionRadius)) {
             g_error = "Invalid static collision configuration.";
+            return 0;
+        }
+        const auto& objective = g_room.bindings.keyDoor;
+        if (objective.doorActor.id != 0 &&
+            !g_collisionBackend.configureDoor(objective.doorActor, objective.doorShapeIndex)) {
+            g_error = "Unable to bind the door collision shape.";
             return 0;
         }
         game_init(g_room.bindings, &g_collisionBackend);
@@ -54,8 +83,8 @@ int unity_game_get_shape(unsigned int index, CollisionShape* shape) {
 }
 
 extern "C" __declspec(dllexport)
-void unity_game_step(float moveX, float moveY, float deltaSeconds) {
-    const InputFrame input{{moveX, moveY}, false};
+void unity_game_step(float moveX, float moveY, float deltaSeconds, int interactPressed) {
+    const InputFrame input{{moveX, moveY}, interactPressed != 0};
     game_step(&input, deltaSeconds);
 }
 
@@ -77,4 +106,14 @@ unsigned int unity_game_get_camera_id() { return game_get_camera_ref().id; }
 extern "C" __declspec(dllexport)
 void unity_game_get_camera_pose(Pose* pose) {
     if (pose != nullptr) *pose = game_get_camera_pose();
+}
+
+extern "C" __declspec(dllexport)
+void unity_game_get_key_door_bindings(KeyDoorBindings* bindings) {
+    if (bindings != nullptr) *bindings = g_error == nullptr ? g_room.bindings.keyDoor : KeyDoorBindings{};
+}
+
+extern "C" __declspec(dllexport)
+void unity_game_get_key_door_view(KeyDoorView* view) {
+    if (view != nullptr) *view = game_get_key_door_view();
 }

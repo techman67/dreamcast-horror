@@ -1,0 +1,3 @@
+# Local emulator, settings, caches and saves are not project source.
+*
+!.gitignore

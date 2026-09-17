@@ -26,4 +26,8 @@ Pose game_get_camera_pose();
 // Host/test inspection hook for the currently active camera.
 CameraRef game_get_camera_ref();
 
+KeyDoorView game_get_key_door_view();
+// Fixed-capacity, allocation-free batch. Reading drains it; reset clears it.
+AudioEvents game_take_audio_events();
+
 }

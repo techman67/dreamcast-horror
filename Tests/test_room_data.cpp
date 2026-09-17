@@ -21,7 +21,7 @@ int main() {
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     RoomData room{};
     assert(parseRoomData(text.c_str(), room) == nullptr);
-    assert(room.shapeCount == 10);
+    assert(room.shapeCount == 11);
     assert(room.bindings.cameraTransition.cameraA.id == 1);
     assert(room.bindings.cameraTransition.cameraB.id == 2);
     assert(std::fabs(room.bindings.cameraTransition.poseA.position.y - 6.33f) < 0.001f);
@@ -31,6 +31,8 @@ int main() {
     // The real exported room must allow passage beneath its decorative lintel.
     StaticCollisionBackend collision;
     collision.configure(room.shapes, room.shapeCount, room.bindings.playerCollisionRadius);
+    assert(collision.configureDoor(room.bindings.keyDoor.doorActor, room.bindings.keyDoor.doorShapeIndex));
+    collision.setDoorObstruction(room.bindings.keyDoor.doorActor, false);
     auto result = collision.resolveMove({1}, {0, 0, -4}, {0, 0, -2});
     assert(std::fabs(result.resolvedDelta.z + 2.0f) < 0.0001f);
     assert(!result.blocked);
@@ -47,20 +49,26 @@ int main() {
     // Failed parsing must leave the existing output intact.
     auto reject = [&](const std::string& invalid) {
         assert(parseRoomData(invalid.c_str(), room) != nullptr);
-        assert(room.shapeCount == 10);
+        assert(room.shapeCount == 11);
         assert(std::fabs(room.bindings.cameraTransition.poseA.position.y - 6.33f) < 0.001f);
     };
-    reject(replace(text, "dreamcast_room 1", "dreamcast_room 2"));
-    reject(replace(text, "shapes 10", "shapes 129"));
-    reject(replace(text, "shapes 10", "shapes -1"));
+    reject(replace(text, "dreamcast_room 2", "dreamcast_room 9"));
+    reject(replace(text, "shapes 11", "shapes 129"));
+    reject(replace(text, "shapes 11", "shapes -1"));
     reject(replace(text, "camera 2", "camera 1"));
     reject(replace(text, "box", "unknown"));
     reject(replace(text, "player 1", "player 0"));
     reject(text.substr(0, text.find("shapes")));
     reject(text + "unexpected");
+    reject(text + std::string(65537, ' ')); // Whitespace still consumes startup RAM.
+    reject(replace(text, "key 2", "key 1"));
+    reject(replace(text, "door 3", "door 2"));
+    reject(replace(text, "exit -5.9", "exit 0"));
+    reject(text.substr(0, text.find("key 2")) + "end");
     assert(parseRoomData(nullptr, room) != nullptr);
 
-    const auto prefix = text.substr(0, text.find("shapes"));
+    // Version 1 stays valid for movement-only rooms; version 2 requires its objective.
+    const auto prefix = replace(text.substr(0, text.find("shapes")), "dreamcast_room 2", "dreamcast_room 1");
     std::string maximum = prefix + "shapes 128\n";
     for (int i = 0; i < 128; ++i) maximum += "box 10 0 10 1 1 1\n";
     maximum += "end\n";

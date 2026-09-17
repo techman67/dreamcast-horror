@@ -26,14 +26,18 @@ bool pose(std::istream& input, Pose& value) {
 
 const char* parseRoomData(const char* text, RoomData& output) {
     if (text == nullptr) return "Room text is missing.";
+    // Enforce the same startup budget in every host, including Unity validation.
+    std::size_t length = 0;
+    while (length <= 65536 && text[length] != '\0') ++length;
+    if (length > 65536) return "Room text exceeds the 64 KiB startup limit.";
     std::istringstream input(text);
     input.imbue(std::locale::classic());
     RoomData room{};
     auto& bindings = room.bindings;
     auto& transition = bindings.cameraTransition;
     int version = 0;
-    if (!keyword(input, "dreamcast_room") || !(input >> version) || version != 1)
-        return "Unsupported room format; expected dreamcast_room 1.";
+    if (!keyword(input, "dreamcast_room") || !(input >> version) || (version != 1 && version != 2))
+        return "Unsupported room format; expected dreamcast_room 1 or 2.";
     if (!keyword(input, "player") || !(input >> bindings.playerActor.id) ||
         bindings.playerActor.id == 0 || !pose(input, bindings.initialPlayerPose) ||
         !scalar(input, bindings.playerCollisionRadius) || bindings.playerCollisionRadius <= 0)
@@ -73,6 +77,33 @@ const char* parseRoomData(const char* text, RoomData& output) {
         } else {
             return "Unknown collision shape type.";
         }
+    }
+    if (version == 2) {
+        auto& objective = bindings.keyDoor;
+        if (!keyword(input, "key") || !(input >> objective.keyActor.id) ||
+            objective.keyActor.id == 0 || objective.keyActor.id == bindings.playerActor.id ||
+            !vector(input, objective.keyPosition) || !scalar(input, objective.keyRange) || objective.keyRange <= 0)
+            return "Invalid key actor, position or interaction range.";
+        if (!keyword(input, "door") || !(input >> objective.doorActor.id) ||
+            objective.doorActor.id == 0 || objective.doorActor.id == bindings.playerActor.id ||
+            objective.doorActor.id == objective.keyActor.id || !vector(input, objective.doorPosition) ||
+            !scalar(input, objective.doorRange) || !(input >> objective.doorShapeIndex) ||
+            objective.doorShapeIndex >= room.shapeCount)
+            return "Invalid door actor, position, range or collision shape index.";
+        const auto& door = room.shapes[objective.doorShapeIndex];
+        if (door.type != CollisionShapeType::Box ||
+            std::fabs(door.center.x - objective.doorPosition.x) > 0.001f ||
+            std::fabs(door.center.y - objective.doorPosition.y) > 0.001f ||
+            std::fabs(door.center.z - objective.doorPosition.z) > 0.001f ||
+            objective.doorRange <= door.halfExtents.z + bindings.playerCollisionRadius)
+            return "Door must bind its own box and be interactable from outside the closed obstacle.";
+        if (!keyword(input, "exit") || !scalar(input, objective.exitBoundaryZ) ||
+            !scalar(input, objective.exitCenterX) || !scalar(input, objective.exitHalfWidthX) ||
+            objective.exitHalfWidthX <= 0 ||
+            objective.exitBoundaryZ >= door.center.z - door.halfExtents.z - bindings.playerCollisionRadius ||
+            std::fabs(objective.exitCenterX - door.center.x) + objective.exitHalfWidthX >
+                door.halfExtents.x - bindings.playerCollisionRadius)
+            return "Exit must be south of the door and within its walkable opening.";
     }
     if (!keyword(input, "end")) return "Expected end of room.";
     input >> std::ws;

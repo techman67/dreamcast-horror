@@ -1,0 +1,7 @@
+newmtl AC_PaintedMetal
+Kd 1 1 1
+map_Kd ac-painted-metal-source.png
+
+newmtl AC_DarkMetal
+Kd 1 1 1
+map_Kd ac-dark-metal-source.png

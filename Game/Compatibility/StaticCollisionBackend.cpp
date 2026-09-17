@@ -41,7 +41,26 @@ bool StaticCollisionBackend::configure(
     m_shapes = shapes;
     m_shapeCount = shapeCount;
     m_playerRadius = playerRadius;
+    m_doorActor = ActorRef{};
+    m_doorShapeIndex = MaxStaticCollisionShapes;
+    m_doorBlocked = true;
     return true;
+}
+
+bool StaticCollisionBackend::configureDoor(const ActorRef& door, unsigned int shapeIndex) {
+    if (door.id == 0 || shapeIndex >= m_shapeCount) return false;
+    m_doorActor = door;
+    m_doorShapeIndex = shapeIndex;
+    m_doorBlocked = true;
+    return true;
+}
+
+void StaticCollisionBackend::setDoorObstruction(const ActorRef& door, bool enabled) {
+    if (door.id == m_doorActor.id) m_doorBlocked = enabled;
+}
+
+bool StaticCollisionBackend::isShapeEnabled(unsigned int index) const {
+    return index != m_doorShapeIndex || m_doorBlocked;
 }
 
 DisplacementResult
@@ -101,6 +120,7 @@ StaticCollisionBackend::resolveMove(
          i < m_shapeCount && nrmCount < MaxNormals - 2;
          ++i) {
 
+        if (!isShapeEnabled(i)) continue;
         const CollisionShape& shape = m_shapes[i];
 
         if (shape.type == CollisionShapeType::Box) {
@@ -272,6 +292,7 @@ float StaticCollisionBackend::resolveX(
          i < m_shapeCount;
          ++i) {
 
+        if (!isShapeEnabled(i)) continue;
         const CollisionShape& shape =
             m_shapes[i];
 
@@ -340,6 +361,7 @@ float StaticCollisionBackend::resolveZ(
          i < m_shapeCount;
          ++i) {
 
+        if (!isShapeEnabled(i)) continue;
         const CollisionShape& shape =
             m_shapes[i];
 

@@ -1,0 +1,2 @@
+# WSL executes these scripts directly; Windows checkout must not add CRLF.
+*.sh text eol=lf

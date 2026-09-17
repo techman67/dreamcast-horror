@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public sealed class NativeGameBridge :
     MonoBehaviour
@@ -22,7 +21,8 @@ public sealed class NativeGameBridge :
         unity_game_step(
             float moveX,
             float moveY,
-            float deltaSeconds);
+            float deltaSeconds,
+            int interactPressed);
 
     [DllImport(
         "dreamcast_horror",
@@ -85,15 +85,21 @@ public sealed class NativeGameBridge :
 
     private uint lastCameraId = 0;
     private bool initialized;
+    private RoomAudio audioPresentation;
+    private KeyDoorPresentation slicePresentation;
+    public static NativeKeyDoor.Bindings SliceBindings { get; private set; }
+    public static NativeKeyDoor.View SliceView { get; private set; }
 
     private void OnEnable()
     {
         // Re-enabling the host resumes the same native room and debug snapshot.
-        if (initialized) IsInitialized = true;
+        if (initialized) { IsInitialized = true; audioPresentation?.Reset(); }
     }
 
     private void Start()
     {
+        audioPresentation?.Dispose();
+        audioPresentation = null;
         initialized = false;
         IsInitialized = false;
         LoadedShapes = null;
@@ -110,6 +116,19 @@ public sealed class NativeGameBridge :
             if (unity_game_init(roomText) == 0)
                 throw new InvalidDataException(Marshal.PtrToStringAnsi(unity_game_get_error()));
             LoadedShapes = NativeRoomDiagnostics.Snapshot();
+            SliceBindings = NativeKeyDoor.ReadBindings();
+            SliceView = NativeKeyDoor.ReadView();
+            slicePresentation = FindAnyObjectByType<KeyDoorPresentation>();
+            if (SliceView.Enabled)
+            {
+                if (slicePresentation == null || !slicePresentation.HasVisualBindings ||
+                    slicePresentation.KeyActorId != SliceBindings.keyActor ||
+                    slicePresentation.DoorActorId != SliceBindings.doorActor)
+                    throw new InvalidDataException("The exported key and door require matching presentation bindings.");
+                slicePresentation.Initialize(SliceBindings);
+            }
+            RefreshSlicePresentation();
+            audioPresentation = new RoomAudio(transform);
             initialized = true;
             IsInitialized = true;
         }
@@ -132,11 +151,13 @@ public sealed class NativeGameBridge :
 
     private void OnDisable()
     {
+        audioPresentation?.Stop();
         IsInitialized = false;
     }
 
     private void OnDestroy()
     {
+        audioPresentation?.Dispose();
         IsInitialized = false;
         LoadedShapes = null;
     }
@@ -144,33 +165,18 @@ public sealed class NativeGameBridge :
     private void Update()
     {
         if (!IsInitialized) return;
-        float moveX = 0.0f;
-        float moveY = 0.0f;
-
-        Keyboard keyboard =
-            Keyboard.current;
-
-        if (keyboard != null)
-        {
-            if (keyboard.aKey.isPressed)
-                moveX -= 1.0f;
-
-            if (keyboard.dKey.isPressed)
-                moveX += 1.0f;
-
-            if (keyboard.sKey.isPressed)
-                moveY -= 1.0f;
-
-            if (keyboard.wKey.isPressed)
-                moveY += 1.0f;
-        }
-
-        unity_game_step(
-            moveX,
-            moveY,
-            Time.deltaTime);
+        UnityPlayerInput.Sample input = UnityPlayerInput.Read();
+        unity_game_step(input.move.x, input.move.y, Time.deltaTime, input.interactPressed ? 1 : 0);
+        audioPresentation.Consume();
+        RefreshSlicePresentation();
 
         ApplyActiveCamera(false);
+    }
+
+    private void RefreshSlicePresentation()
+    {
+        SliceView = NativeKeyDoor.ReadView();
+        if (slicePresentation != null) slicePresentation.Apply(SliceView);
     }
 
     private void ResolveAuthoredCameras()

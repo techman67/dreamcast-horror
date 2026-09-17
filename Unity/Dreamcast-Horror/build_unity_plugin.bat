@@ -47,7 +47,7 @@ echo Building dreamcast_horror.dll (x64)...
 echo ============================================================
 echo.
 
-cl /nologo /std:c++17 /O2 /EHsc /LD "%REPO%\UnityBridge.cpp" "%REPO%\Game\Core\RoomData.cpp" "%REPO%\Game\Compatibility\Game.cpp" "%REPO%\Game\Compatibility\StaticCollisionBackend.cpp" "%REPO%\Game\Gameplay\Player.cpp" /I "%REPO%\Game\Compatibility" /I "%REPO%\Game\Core" /I "%REPO%\Game\Gameplay" /Fe:"%OUT%\dreamcast_horror.dll" /link /IMPLIB:"%BUILD%\dreamcast_horror.lib"
+cl /nologo /std:c++17 /O2 /EHsc /LD "%REPO%\UnityBridge.cpp" "%REPO%\Game\Core\RoomData.cpp" "%REPO%\Game\Core\AudioData.cpp" "%REPO%\Game\Compatibility\Game.cpp" "%REPO%\Game\Compatibility\StaticCollisionBackend.cpp" "%REPO%\Game\Gameplay\Player.cpp" "%REPO%\Game\Gameplay\KeyDoor.cpp" /I "%REPO%\Game\Compatibility" /I "%REPO%\Game\Core" /I "%REPO%\Game\Gameplay" /Fe:"%OUT%\dreamcast_horror.dll" /link /IMPLIB:"%BUILD%\dreamcast_horror.lib"
 
 set "BUILD_RESULT=%ERRORLEVEL%"
 popd

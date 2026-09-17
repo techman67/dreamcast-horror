@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.16)
+project(DreamcastHorrorSetup LANGUAGES C CXX)
+
+set(SIMULANT_INCLUDE_FOLDER "" CACHE PATH "Simulant SDK headers")
+set(SIMULANT_LIBRARY_FOLDER "" CACHE PATH "Simulant SDK library")
+if(PLATFORM_DREAMCAST)
+    # Build the engine and host with the same compiler; upstream prebuilts differ.
+    set(SIMULANT_INCLUDE_FOLDER "${CMAKE_SOURCE_DIR}/dreamcast-sdk/include")
+    set(SIMULANT_LIBRARY_FOLDER "${CMAKE_SOURCE_DIR}/dreamcast-sdk/lib")
+    if(NOT EXISTS "${SIMULANT_LIBRARY_FOLDER}/libsimulant.a")
+        message(FATAL_ERROR "Run scripts/build-dreamcast-sdk.sh first.")
+    endif()
+endif()
+if(NOT SIMULANT_INCLUDE_FOLDER OR NOT SIMULANT_LIBRARY_FOLDER)
+    message(FATAL_ERROR "Use the project run.ps1 wrapper or Simulant CLI to select the SDK.")
+endif()
+
+add_library(room-core STATIC
+    Game/Compatibility/Game.cpp Game/Compatibility/StaticCollisionBackend.cpp
+    Game/Core/RoomData.cpp Game/Core/AudioData.cpp Game/Core/PropData.cpp Game/Gameplay/Player.cpp Game/Gameplay/KeyDoor.cpp)
+target_include_directories(room-core PUBLIC Game/Core Game/Compatibility Game/Gameplay)
+target_compile_features(room-core PUBLIC cxx_std_17)
+# KOS toolchains enable fast-math for rendering. Core validation needs IEEE checks.
+target_compile_options(room-core PRIVATE -fno-fast-math)
+add_executable(setup-check sources/main.cpp sources/RoomScene.cpp sources/RoomAudio.cpp sources/RoomProps.cpp)
+if(NOT PLATFORM_DREAMCAST)
+    target_sources(setup-check PRIVATE sources/RoomChecks.cpp)
+endif()
+target_compile_features(setup-check PRIVATE cxx_std_17)
+target_include_directories(setup-check PRIVATE "${SIMULANT_INCLUDE_FOLDER}")
+target_link_directories(setup-check PRIVATE "${SIMULANT_LIBRARY_FOLDER}")
+target_link_libraries(setup-check PRIVATE room-core simulant)
+
+if(PLATFORM_DREAMCAST)
+    target_link_libraries(setup-check PRIVATE pthread stdc++ kallisti gcc c kallisti ppp m)
+else()
+    find_package(SDL2 REQUIRED)
+    find_package(OpenGL REQUIRED)
+    find_package(OpenAL REQUIRED)
+    find_package(Threads REQUIRED)
+    target_include_directories(setup-check PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(setup-check PRIVATE ${SDL2_LIBRARIES} OpenGL::GL OpenAL::OpenAL Threads::Threads m)
+endif()
+
+# The downloaded release archive uses LTO. Build with its matching SDK compiler.
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+if(ipo_supported)
+    set_property(TARGET setup-check PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION "${CMAKE_BINARY_DIR}/assets/")

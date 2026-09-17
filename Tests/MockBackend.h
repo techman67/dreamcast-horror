@@ -10,6 +10,15 @@ public:
     ActorRef lastActor{};
     Vec3 lastPosition{};
     Vec3 lastDesiredDelta{};
+    ActorRef lastDoor{};
+    bool doorBlocked = true;
+    unsigned int doorChanges = 0;
+
+    void setDoorObstruction(const ActorRef& door, bool enabled) override {
+        lastDoor = door;
+        doorBlocked = enabled;
+        ++doorChanges;
+    }
 
     DisplacementResult resolveMove(
         const ActorRef& actor,

@@ -26,4 +26,7 @@ public:
         const ActorRef& actor,
         const Vec3& position,
         const Vec3& desiredDelta) = 0;
+
+    // Only the single authored door is mutable. This is not general physics.
+    virtual void setDoorObstruction(const ActorRef& door, bool enabled) = 0;
 };

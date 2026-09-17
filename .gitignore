@@ -2,6 +2,9 @@
 # C++ / MSVC build artifacts
 # =========================
 *.obj
+# Wavefront model sources are assets, not compiler object files.
+!Art/**/*.obj
+!Unity/**/Assets/**/*.obj
 *.exe
 *.pdb
 *.ilk

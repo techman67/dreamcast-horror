@@ -67,6 +67,21 @@ struct CameraTransition {
     float halfWidthX = 0.0f;
 };
 
+// One key, one door and a southbound exit for the first playable objective.
+// Zero actor IDs disable the objective for older room files and test hosts.
+struct KeyDoorBindings {
+    ActorRef keyActor;
+    ActorRef doorActor;
+    Vec3 keyPosition;
+    Vec3 doorPosition;
+    unsigned int doorShapeIndex = MaxStaticCollisionShapes;
+    float keyRange = 1.1f;
+    float doorRange = 1.4f;
+    float exitBoundaryZ = 0.0f;
+    float exitCenterX = 0.0f;
+    float exitHalfWidthX = 0.0f;
+};
+
 // Initial game bindings.
 //
 // Collision shapes are intentionally NOT part of GameState.
@@ -82,4 +97,5 @@ struct SliceBindings {
     CameraTransition cameraTransition;
 
     float playerCollisionRadius = 0.35f;
+    KeyDoorBindings keyDoor;
 };

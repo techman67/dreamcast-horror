@@ -12,12 +12,16 @@ public:
         unsigned int shapeCount,
         float playerRadius);
 
+    bool configureDoor(const ActorRef& door, unsigned int shapeIndex);
+    void setDoorObstruction(const ActorRef& door, bool enabled) override;
+
     DisplacementResult resolveMove(
         const ActorRef& actor,
         const Vec3& position,
         const Vec3& desiredDelta) override;
 
 private:
+    bool isShapeEnabled(unsigned int index) const;
     float resolveX(
         const Vec3& position,
         float desiredX,
@@ -51,4 +55,7 @@ private:
     const CollisionShape* m_shapes;
     unsigned int m_shapeCount;
     float m_playerRadius;
+    ActorRef m_doorActor{};
+    unsigned int m_doorShapeIndex = MaxStaticCollisionShapes;
+    bool m_doorBlocked = true;
 };

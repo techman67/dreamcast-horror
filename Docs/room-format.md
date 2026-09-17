@@ -1,22 +1,33 @@
-# Prototype room format, version 1
+# Prototype room format, versions 1 and 2
 
 The shared artifact is `Unity/Dreamcast-Horror/Assets/StreamingAssets/sample.room`.
 All hosts consume the same text. Whitespace separates tokens; decimal numbers
 use a period regardless of locale. Comments and unknown/trailing tokens are
 rejected. No engine GUIDs, object names or platform-specific paths occur inside.
 
-Records occur in this exact order:
+The current key-door sample uses version 2. Version 1 remains supported for
+movement-only rooms and does not have an objective. Records occur in this order:
 
 ```text
-dreamcast_room 1
+dreamcast_room 2
 player <actor-id> <x> <y> <z> <yaw> <pitch> <roll> <collision-radius>
 camera 1 <x> <y> <z> <yaw> <pitch> <roll>
 camera 2 <x> <y> <z> <yaw> <pitch> <roll>
 transition <boundary-z> <half-width-x> <initial-camera-id>
 shapes <count>
 <zero or more shape records>
+key <actor-id> <x> <y> <z> <interaction-range>
+door <actor-id> <x> <y> <z> <interaction-range> <zero-based-shape-index>
+exit <boundary-z> <center-x> <half-width-x>
 end
 ```
+
+Version 1 omits the `key`, `door` and `exit` records. Version 2 requires all three.
+Key and door IDs must be distinct and must differ from the player ID. The door
+must reference a box centered on its authored position, and its interaction
+range must reach outside the closed slab. The exit must lie south of the door,
+with its width contained in the opening after accounting for player radius.
+The door counts toward the same 128-shape budget.
 
 Shape records:
 
@@ -49,9 +60,13 @@ All sizes/radii must be positive; capsule height must cover its diameter.
 4. Set the player's visual transform; CppPlayerVisual subtracts its pivot offset
    to export the native spawn. Set radius and initial camera in the bridge's
    room export settings. These inspector values affect export, not live gameplay.
-5. Select **Dreamcast > Export sample room** and review the text diff. Export
+5. For the objective, keep a KeyDoorPresentation component with references to
+   BrassKey, SliceDoor, its CppCollision and SliceExit. Configure the actor IDs,
+   interaction ranges and exit width there. Export with the door and key active
+   outside Play mode; the door uses an explicit manual box around its slab.
+6. Select **Dreamcast > Export sample room** and review the text diff. Export
    validates the data through the same native parser before replacing the file.
-6. Run native tests and ArchitectureChecks.Run. The Unity check reports scene /
+7. Run native tests, ArchitectureChecks.Run and KeyDoorChecks.Run. The Unity check reports scene /
    export drift. Do not silently generate content during a verification run.
 
 Edit-mode gizmos show cached authoring values. Export or an inspector component
@@ -63,6 +78,23 @@ snapshot, so later editor changes cannot masquerade as live collision changes.
 The checked-in scene is a graybox made from built-in primitives, not final art.
 Keep production .blend files as canonical sources when replacing them. A future
 Blender exporter can emit these same room values; do not make Unity's mesh
-classification algorithm a requirement for another backend. Mesh, material,
-animation and audio conversion are separate unverified work. No Simulant asset
-format or importer is assumed by this prototype format.
+classification algorithm a requirement for another backend. Static mesh/base-color
+export uses a separate portable bundle, documented in [static props](static-props.md).
+Animation remains future work; this collision format does not depend on a
+Simulant mesh importer.
+
+## Audio bundle
+
+The room exporter also writes `sample.audio` and the referenced PCM WAVs under
+`StreamingAssets/room-audio/`. Sound assignments are authored with Dreamcast Sound
+Cue and Dreamcast Room Sound components. Room format versions 1/2 remain unchanged;
+the audio sidecar has its own version and parser. The current host/build workflow
+requires that sidecar, which can explicitly describe a silent room.
+
+Use **Dreamcast > Export room and build CDI** to collect the complete bundle and
+build the disc. **Dreamcast > Audio > Check selected audio** explains source-file
+compatibility; **Check room audio** checks the aggregate configuration. See
+[audio authoring](../Audio/README.md) and [manifest schema](audio-format.md).
+
+Static visuals are carried in the companion `sample.props` file and referenced
+`prop-textures/` files; they do not alter the collision format. See [static props](static-props.md).
